@@ -3,7 +3,8 @@
     "rootNamespace": "AdapTypeXR.Editor",
     "references": [
         "AdapTypeXR",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

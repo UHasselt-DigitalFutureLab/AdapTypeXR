@@ -10,6 +10,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
 
@@ -474,7 +475,9 @@ namespace AdapTypeXR.Editor
         {
             var go = new GameObject("EventSystem");
             go.AddComponent<EventSystem>();
-            go.AddComponent<StandaloneInputModule>();
+            // InputSystemUIInputModule is required when activeInputHandler = Input System only.
+            // StandaloneInputModule calls Input.mousePosition which throws in that mode.
+            go.AddComponent<InputSystemUIInputModule>();
         }
 
         // ── UI Helper Methods ──────────────────────────────────────────────
@@ -639,10 +642,17 @@ namespace AdapTypeXR.Editor
 
         private static Material MakeMaterial(Color colour)
         {
-            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            if (mat.shader.name == "Hidden/InternalErrorShader")
-                mat = new Material(Shader.Find("Standard"));
+            // Try URP shaders in order of preference; fall back to Standard if none found.
+            var shader = Shader.Find("Universal Render Pipeline/Lit")
+                ?? Shader.Find("Universal Render Pipeline/Simple Lit")
+                ?? Shader.Find("Universal Render Pipeline/Unlit")
+                ?? Shader.Find("Standard");
+
+            var mat = new Material(shader!);
+            // Standard uses _Color; URP Lit / Simple Lit use _BaseColor.
             mat.color = colour;
+            if (mat.HasProperty("_BaseColor"))
+                mat.SetColor("_BaseColor", colour);
             return mat;
         }
 

@@ -115,20 +115,30 @@ namespace AdapTypeXR.Controllers
                 participantId, profile, conditionIds,
                 ipd, gazeConsented, physiologicalConsented, _appVersion);
 
-            await _repository!.BeginSessionAsync(_activeSession);
+            // Fire I/O in the background so book display is never blocked by a disk failure.
+            var sessionTask = _repository!.BeginSessionAsync(_activeSession);
 
             SubscribeEvents();
-
             _eyeTracker!.StartTracking();
-            _bookPresenter!.LoadPassage(passage);
 
+            // Show the book immediately — no dependency on I/O success.
+            _bookPresenter!.LoadPassage(passage);
             ApplyCondition(_conditionIndex);
             TransitionTo(SessionState.Active);
 
             ReadingEventBus.Instance.Publish(new SessionStartedEvent(_activeSession));
             _passageStartTime = DateTime.UtcNow;
-
             LogState($"Session {_activeSession.SessionId} started for participant {participantId}.");
+
+            // Await the repository task; log failures but don't abort the session.
+            try
+            {
+                await sessionTask;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[ReadingSessionController] Session recording failed: {ex.Message}");
+            }
         }
 
         /// <summary>Pauses an active session (e.g., participant break).</summary>
