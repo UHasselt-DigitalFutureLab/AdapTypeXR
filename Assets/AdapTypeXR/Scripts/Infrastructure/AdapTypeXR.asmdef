@@ -1,0 +1,25 @@
+{
+    "name": "AdapTypeXR",
+    "rootNamespace": "AdapTypeXR",
+    "references": [
+        "Unity.TextMeshPro",
+        "Unity.XR.Interaction.Toolkit",
+        "Unity.XR.OpenXR",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.varjo.xr",
+            "expression": "",
+            "define": "VARJO_XR"
+        }
+    ],
+    "noEngineReferences": false
+}

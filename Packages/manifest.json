@@ -1,0 +1,27 @@
+{
+  "dependencies": {
+    "com.unity.xr.openxr": "1.11.0",
+    "com.unity.xr.interaction.toolkit": "3.0.3",
+    "com.unity.xr.management": "4.4.1",
+    "com.unity.textmeshpro": "3.0.9",
+    "com.unity.render-pipelines.universal": "17.0.3",
+    "com.unity.inputsystem": "1.8.1",
+    "com.unity.mathematics": "1.3.2",
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
+  "scopedRegistries": [
+    {
+      "name": "Varjo",
+      "url": "https://registry.npmjs.org",
+      "scopes": [
+        "com.varjo"
+      ]
+    }
+  ],
+  "_comments": {
+    "varjo-sdk": "Add com.varjo.xr after importing from Varjo Developer Portal.",
+    "varjo-sdk-version": "Target: com.varjo.xr 3.9.0 or later for XR-4 support.",
+    "eye-tracking": "Enable XR Eye Tracking under Project Settings > XR Plug-in Management > Varjo.",
+    "varjo-sdk-import": "Download from: https://developer.varjo.com/downloads"
+  }
+}
