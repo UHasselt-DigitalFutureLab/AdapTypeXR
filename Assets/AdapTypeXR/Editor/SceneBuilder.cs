@@ -3,6 +3,7 @@ using AdapTypeXR.Controllers;
 using AdapTypeXR.Presenters;
 using AdapTypeXR.Services;
 using AdapTypeXR.Simulation;
+using AdapTypeXR.Typography;
 using AdapTypeXR.UI;
 using TMPro;
 using UnityEditor;
