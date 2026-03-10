@@ -66,6 +66,7 @@ namespace AdapTypeXR.Editor
             if (!ConfirmBuild()) return;
 
             EnsureScenesDirectory();
+            EnsureTagExists("BookPage");   // required before any GameObject.tag assignment
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -80,8 +81,12 @@ namespace AdapTypeXR.Editor
             // ── Camera ─────────────────────────────────────────────────────
             var mainCamera = CreateMainCamera();
 
+            // ── Environment ────────────────────────────────────────────────
+            CreateFloor();
+
             // ── Book ───────────────────────────────────────────────────────
             var book = CreateBook(mainCamera);
+            CreateBookLight();
 
             // ── Session Management ─────────────────────────────────────────
             var sessionManager = CreateSessionManager(mainCamera);
@@ -580,6 +585,40 @@ namespace AdapTypeXR.Editor
             img.color = new Color(1f, 1f, 1f, 0.15f);
         }
 
+        // ── Environment Helpers ────────────────────────────────────────────
+
+        /// <summary>
+        /// Adds a simple floor plane so the scene has spatial grounding.
+        /// A matte dark-grey material prevents it from distracting from the book.
+        /// </summary>
+        private static void CreateFloor()
+        {
+            var floor = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            floor.name = "Floor";
+            floor.transform.position = Vector3.zero;
+            floor.transform.localScale = new Vector3(3f, 1f, 3f);
+
+            var mat = MakeMaterial(new Color(0.15f, 0.15f, 0.16f));
+            floor.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        }
+
+        /// <summary>
+        /// Adds a warm point light positioned just above and in front of the book
+        /// to illuminate it clearly against the dark background.
+        /// </summary>
+        private static void CreateBookLight()
+        {
+            var go = new GameObject("Book Light");
+            go.transform.position = BookPosition + new Vector3(0f, 0.5f, -0.4f);
+
+            var light = go.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1.0f, 0.95f, 0.85f);
+            light.intensity = 2.5f;
+            light.range = 2.0f;
+            light.shadows = LightShadows.None;
+        }
+
         // ── Primitive / Material Helpers ───────────────────────────────────
 
         private static GameObject MakePrimitive(
@@ -608,6 +647,26 @@ namespace AdapTypeXR.Editor
         }
 
         // ── Utilities ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Adds the given tag to TagManager if it doesn't already exist.
+        /// Must be called before any GameObject.tag assignment that uses the tag,
+        /// otherwise Unity throws "Tag is not defined".
+        /// </summary>
+        private static void EnsureTagExists(string tag)
+        {
+            var tagManager = new SerializedObject(
+                AssetDatabase.LoadMainAssetAtPath("ProjectSettings/TagManager.asset"));
+            var tagsProp = tagManager.FindProperty("tags");
+
+            for (int i = 0; i < tagsProp.arraySize; i++)
+                if (tagsProp.GetArrayElementAtIndex(i).stringValue == tag) return;
+
+            tagsProp.arraySize++;
+            tagsProp.GetArrayElementAtIndex(tagsProp.arraySize - 1).stringValue = tag;
+            tagManager.ApplyModifiedProperties();
+            Debug.Log($"[SceneBuilder] Registered tag '{tag}' in TagManager.");
+        }
 
         private static bool ConfirmBuild()
         {

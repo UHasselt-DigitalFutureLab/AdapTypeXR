@@ -175,22 +175,33 @@ namespace AdapTypeXR.Presenters
         }
 
         /// <summary>
-        /// Finds all child GameObjects tagged "BookPage" and adds them to the page list.
-        /// Pages are sorted by sibling index (top-down in the hierarchy).
+        /// Finds all child GameObjects whose name starts with "Page_", ordered by sibling index.
+        /// Falls back to "BookPage" tag discovery if no name-matched pages are found.
+        /// Using name matching avoids a dependency on the TagManager having "BookPage" defined.
         /// </summary>
         private void AutoDiscoverPages()
         {
             _pageObjects.Clear();
             foreach (Transform child in transform)
             {
-                if (child.CompareTag("BookPage"))
+                if (child.name.StartsWith("Page_"))
                     _pageObjects.Add(child.gameObject);
             }
 
+            // Tag-based fallback.
+            if (_pageObjects.Count == 0)
+            {
+                foreach (Transform child in transform)
+                {
+                    try { if (child.CompareTag("BookPage")) _pageObjects.Add(child.gameObject); }
+                    catch { /* Tag may not be defined in TagManager — silently skip. */ }
+                }
+            }
+
             if (_pageObjects.Count > 0)
-                Debug.Log($"[BookPresenter] Auto-discovered {_pageObjects.Count} pages by 'BookPage' tag.");
+                Debug.Log($"[BookPresenter] Auto-discovered {_pageObjects.Count} page(s).");
             else
-                Debug.LogWarning("[BookPresenter] No pages found. Add child objects tagged 'BookPage'.");
+                Debug.LogWarning("[BookPresenter] No pages found. Children must be named 'Page_0', 'Page_1', etc.");
         }
 
         private void ValidatePageObjects()
