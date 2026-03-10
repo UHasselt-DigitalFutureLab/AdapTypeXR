@@ -33,6 +33,25 @@ namespace AdapTypeXR.Typography
                 CreateAtkinsonWordByWord(),
                 CreateArialRsvp(),
                 CreateAtkinsonBionicReading(),
+                CreateMatilda(),
+                CreateEBGaramondPoetry(),
+                CreatePalatinoLiterary(),
+            };
+
+        /// <summary>
+        /// Returns the curated set of fonts shown in the in-scene font selector.
+        /// Includes research conditions and the READSEARCH Matilda font.
+        /// </summary>
+        public static IReadOnlyList<TypographyConfig> BuildFontSelectorCatalogue() =>
+            new List<TypographyConfig>
+            {
+                CreateArialBaseline(),
+                CreateAtkinsonHyperlegibleStatic(),
+                CreateOpenDyslexicStatic(),
+                CreateMatilda(),
+                CreateEBGaramondPoetry(),
+                CreatePalatinoLiterary(),
+                CreateAtkinsonBionicReading(),
             };
 
         /// <summary>Returns a single condition by its ID, or null if not found.</summary>
@@ -175,6 +194,83 @@ namespace AdapTypeXR.Typography
             ResearchNotes = "Bold emphasis on first half of each word. Hypothesis: anchors " +
                 "saccade landing site. Limited peer review — primary research opportunity.",
             SprintNumber = 0
+        };
+
+        /// <summary>
+        /// Matilda — designed by Ann Bessemans (READSEARCH, PXL-MAD / UHasselt).
+        /// Purpose-built for children with dyslexia: disambiguated letterforms,
+        /// consistent spacing, and optimised stroke contrast.
+        ///
+        /// To activate: import the Matilda TMP font asset and place it at
+        /// Resources/Fonts/Matilda SDF. Contact READSEARCH for the font file.
+        /// </summary>
+        public static TypographyConfig CreateMatilda() => new()
+        {
+            ConditionId = "C7-Matilda-Static",
+            DisplayName = "Matilda — READSEARCH (Bessemans)",
+            FontAssetPath = "Fonts/Matilda SDF",
+            FontSize = 28f,
+            LineSpacing = 1.65f,
+            LetterSpacing = 0.09f,
+            WordSpacing = 0.38f,
+            ParagraphSpacing = 1.45f,
+            TextColour = new Color(0.05f, 0.05f, 0.05f),
+            BackgroundColour = new Color(0.98f, 0.96f, 0.90f),
+            Animation = AnimationMode.None,
+            ResearchNotes = "Matilda by Ann Bessemans (READSEARCH, PXL-MAD / UHasselt). " +
+                "Designed for children with dyslexia. Disambiguated letterforms and " +
+                "optimised spacing. Font asset required at Resources/Fonts/Matilda SDF.",
+            SprintNumber = 1
+        };
+
+        /// <summary>
+        /// EB Garamond — elegant Renaissance serif, matched to Van Ostaijen expressionist poetry.
+        /// High visual prestige, strong vertical rhythm, generous x-height.
+        ///
+        /// Import: Resources/Fonts/EBGaramond-Regular SDF (Google Fonts — OFL licence).
+        /// </summary>
+        public static TypographyConfig CreateEBGaramondPoetry() => new()
+        {
+            ConditionId = "C8-Garamond-Poetry",
+            DisplayName = "EB Garamond — Poëzie (Van Ostaijen)",
+            FontAssetPath = "Fonts/EBGaramond-Regular SDF",
+            FontSize = 26f,
+            LineSpacing = 1.80f,
+            LetterSpacing = 0.04f,
+            WordSpacing = 0.28f,
+            ParagraphSpacing = 1.65f,
+            TextColour = new Color(0.08f, 0.06f, 0.04f),
+            BackgroundColour = new Color(0.97f, 0.94f, 0.87f),
+            Animation = AnimationMode.None,
+            ResearchNotes = "EB Garamond: classical Renaissance serif (OFL). " +
+                "High elegance and strong vertical rhythm for Flemish expressionist poetry. " +
+                "Import from Google Fonts → Resources/Fonts/EBGaramond-Regular SDF.",
+            SprintNumber = 1
+        };
+
+        /// <summary>
+        /// Palatino Linotype — humanist calligraphic serif, matched to De Paepe literary prose.
+        /// Natural stroke contrast and generous proportions for comfortable long reading.
+        ///
+        /// Import: Resources/Fonts/Palatino SDF (system font or licensed equivalent).
+        /// </summary>
+        public static TypographyConfig CreatePalatinoLiterary() => new()
+        {
+            ConditionId = "C9-Palatino-Literary",
+            DisplayName = "Palatino — Literair (De Paepe)",
+            FontAssetPath = "Fonts/Palatino SDF",
+            FontSize = 27f,
+            LineSpacing = 1.72f,
+            LetterSpacing = 0.03f,
+            WordSpacing = 0.26f,
+            ParagraphSpacing = 1.55f,
+            TextColour = new Color(0.07f, 0.06f, 0.05f),
+            BackgroundColour = new Color(0.98f, 0.95f, 0.88f),
+            Animation = AnimationMode.None,
+            ResearchNotes = "Palatino: humanist calligraphic serif. " +
+                "Natural stroke contrast and generous proportions for literary prose. " +
+                "Import to Resources/Fonts/Palatino SDF.",
+            SprintNumber = 1
         };
     }
 }

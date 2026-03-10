@@ -39,6 +39,7 @@ namespace AdapTypeXR.Simulation
         // ── Wired at Runtime ───────────────────────────────────────────────
 
         private ReadingSessionController? _sessionController;
+        private BookPresenter? _bookPresenter;
         private CsvDataCollectionRepository? _repository;
 
         // ── Lifecycle ──────────────────────────────────────────────────────
@@ -50,6 +51,15 @@ namespace AdapTypeXR.Simulation
 
         private void Start()
         {
+            // Load content immediately so it is visible even if session wiring or
+            // data recording fails. This is the guaranteed visual fallback.
+            var passage = PassageLibrary.BoemPaukenslag();
+            if (_bookPresenter != null)
+            {
+                _bookPresenter.LoadPassage(passage);
+                _bookPresenter.ApplyTypography(FontProfileFactory.CreateEBGaramondPoetry());
+            }
+
             if (_autoStart)
                 StartDemoSession();
         }
@@ -74,7 +84,7 @@ namespace AdapTypeXR.Simulation
             }
 
             var conditions = BuildConditions();
-            var passage = PassageLibrary.TheRoadNotTaken();
+            var passage = PassageLibrary.BoemPaukenslag();
 
             _sessionController.BeginSession(
                 participantId: _participantId,
@@ -114,6 +124,7 @@ namespace AdapTypeXR.Simulation
                 return;
             }
 
+            _bookPresenter = bookPresenter;
             _repository = new CsvDataCollectionRepository();
             _sessionController.Inject(eyeTracker, _repository, bookPresenter);
 

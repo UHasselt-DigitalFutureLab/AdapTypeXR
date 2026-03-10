@@ -41,23 +41,23 @@ namespace AdapTypeXR.Editor
         // Camera starts at standing eye height, looking forward.
         private static readonly Vector3 CameraPosition = new(0f, 1.7f, 0f);
 
-        // Book sits 1.2 m in front of the camera, tilted -8° to face the reader naturally.
-        private static readonly Vector3 BookPosition  = new(0f, 1.35f, 1.2f);
-        private static readonly Vector3 BookRotation  = new(-8f, 0f, 0f);
+        // Book sits 0.95 m in front of the camera, tilted -10° to face the reader naturally.
+        private static readonly Vector3 BookPosition  = new(0f, 1.15f, 0.95f);
+        private static readonly Vector3 BookRotation  = new(-10f, 0f, 0f);
 
-        // Single page canvas: 148 × 400 units at scale 0.001 = 0.148 m × 0.400 m.
+        // Single page canvas: 190 × 520 units at scale 0.001 = 0.190 m × 0.520 m.
         private const float CanvasScale  = 0.001f;
-        private const float CanvasWidth  = 148f;
-        private const float CanvasHeight = 400f;
+        private const float CanvasWidth  = 190f;
+        private const float CanvasHeight = 520f;
 
         // Half-book offset: each page canvas is shifted left/right from the book centre.
-        private const float PageOffsetX = 0.087f;   // world-space metres
+        private const float PageOffsetX = 0.115f;   // world-space metres
 
         // Book physical dimensions (world space).
-        private const float CoverW = 0.360f;
-        private const float CoverH = 0.430f;
-        private const float CoverD = 0.022f;
-        private const float SpineW = 0.028f;
+        private const float CoverW = 0.480f;
+        private const float CoverH = 0.580f;
+        private const float CoverD = 0.028f;
+        private const float SpineW = 0.036f;
 
         // ── Menu Entry Point ───────────────────────────────────────────────
 
@@ -87,13 +87,16 @@ namespace AdapTypeXR.Editor
 
             // ── Book ───────────────────────────────────────────────────────
             var book = CreateBook(mainCamera);
-            CreateBookLight();
+            // Book light removed — it caused text glare and wash-out.
 
             // ── Session Management ─────────────────────────────────────────
             var sessionManager = CreateSessionManager(mainCamera);
 
             // ── Researcher UI ──────────────────────────────────────────────
             CreateResearcherUI(mainCamera);
+
+            // ── Font Selector UI ───────────────────────────────────────────
+            CreateFontSelectorUI();
 
             // ── Event System ───────────────────────────────────────────────
             CreateEventSystem();
@@ -109,6 +112,7 @@ namespace AdapTypeXR.Editor
                 "Press Play to start the simulation.\n\n" +
                 "Controls:\n" +
                 "  ← → Arrow keys: Turn pages\n" +
+                "  F1: Toggle font selector\n" +
                 "  N: Next condition\n" +
                 "  P: Pause / Resume\n" +
                 "  Tab: Toggle researcher panel\n" +
@@ -348,8 +352,8 @@ namespace AdapTypeXR.Editor
             textRt.offsetMax = new Vector2(-10f, -16f);
 
             var tmp = textGo.AddComponent<TextMeshProUGUI>();
-            tmp.text = index == 0 ? "Loading…" : "";
-            tmp.fontSize = 18f;
+            tmp.text = "";   // SimulationBootstrapper.Start() populates this immediately.
+            tmp.fontSize = 22f;
             tmp.color = new Color(0.08f, 0.07f, 0.05f);
             tmp.enableWordWrapping = true;
             tmp.overflowMode = TextOverflowModes.Overflow;
@@ -469,6 +473,17 @@ namespace AdapTypeXR.Editor
             so.FindProperty("_shortcutsText").objectReferenceValue = shortcutsText;
             so.FindProperty("_panelRoot").objectReferenceValue = panel;
             so.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// Creates the font selector panel. FontSelectorPanel builds its own
+        /// Canvas and buttons at runtime from FontProfileFactory.
+        /// Toggle in Play mode with F1.
+        /// </summary>
+        private static void CreateFontSelectorUI()
+        {
+            var go = new GameObject("FontSelectorUI");
+            go.AddComponent<FontSelectorPanel>();
         }
 
         private static void CreateEventSystem()
