@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using AdapTypeXR.Core.Models;
 
 namespace AdapTypeXR.Core.Interfaces
@@ -7,9 +8,15 @@ namespace AdapTypeXR.Core.Interfaces
     /// Defines a pluggable text animation strategy.
     /// Follows the Strategy pattern — new animation modes can be added
     /// by implementing this interface without modifying TypographyAnimator.
+    ///
+    /// Strategies are plain C# classes (not MonoBehaviours). The hosting
+    /// TypographyAnimator MonoBehaviour runs coroutines on their behalf.
     /// </summary>
     public interface ITypographyAnimationStrategy
     {
+        /// <summary>The AnimationMode this strategy handles.</summary>
+        AnimationMode AnimationMode { get; }
+
         /// <summary>Human-readable name of this animation mode.</summary>
         string ModeName { get; }
 
@@ -26,20 +33,21 @@ namespace AdapTypeXR.Core.Interfaces
         bool IsRunning { get; }
 
         /// <summary>
-        /// Initialises the strategy with the text content and configuration
-        /// it will animate. Must be called before Start().
+        /// Initialises the strategy with the text and configuration it will animate.
+        /// Must be called before <see cref="CreateRoutine"/>.
         /// </summary>
-        /// <param name="text">The full text to animate.</param>
-        /// <param name="config">Typography config including WPM and animation parameters.</param>
         void Initialise(string text, TypographyConfig config);
 
-        /// <summary>Starts or resumes the animation.</summary>
-        void Start();
+        /// <summary>
+        /// Returns an IEnumerator that drives the animation.
+        /// The hosting MonoBehaviour (TypographyAnimator) calls StartCoroutine on this.
+        /// </summary>
+        IEnumerator CreateRoutine();
 
-        /// <summary>Pauses the animation at the current position.</summary>
-        void Pause();
-
-        /// <summary>Stops and resets the animation to the beginning.</summary>
-        void Reset();
+        /// <summary>
+        /// Signals the strategy to stop. Called by TypographyAnimator before
+        /// StopCoroutine so the strategy can clean up internal state.
+        /// </summary>
+        void Stop();
     }
 }

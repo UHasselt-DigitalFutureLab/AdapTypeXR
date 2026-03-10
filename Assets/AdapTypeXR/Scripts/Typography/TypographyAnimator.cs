@@ -14,14 +14,15 @@ namespace AdapTypeXR.Typography
     /// Design pattern: Strategy — new animation modes are added by implementing
     /// <see cref="ITypographyAnimationStrategy"/>; this class never changes.
     ///
-    /// The animator is attached to the same GameObject as <see cref="TextRendererController"/>
-    /// and receives callbacks from it when a new text/config is applied.
+    /// Strategies are plain C# classes. This MonoBehaviour acts as the coroutine
+    /// host, calling StartCoroutine/StopCoroutine on their behalf.
     /// </summary>
     public sealed class TypographyAnimator : MonoBehaviour
     {
         // ── State ──────────────────────────────────────────────────────────
 
         private ITypographyAnimationStrategy? _activeStrategy;
+        private Coroutine? _activeCoroutine;
         private ITextRenderer? _renderer;
         private readonly Dictionary<AnimationMode, ITypographyAnimationStrategy> _strategies = new();
 
@@ -32,42 +33,36 @@ namespace AdapTypeXR.Typography
 
         private void Awake()
         {
-            // Register all built-in strategies. New strategies can be registered
-            // externally via RegisterStrategy without modifying this class.
+            // Register built-in strategies. These are plain C# classes — NOT MonoBehaviours.
+            // New strategies can be registered externally without modifying this class (OCP).
             RegisterStrategy(new WordByWordHighlightStrategy());
             RegisterStrategy(new RsvpStrategy());
         }
 
         private void OnDestroy()
         {
-            _activeStrategy?.Reset();
+            Deactivate();
         }
 
         // ── Public API ─────────────────────────────────────────────────────
 
         /// <summary>
-        /// Registers a custom animation strategy. If a strategy for the same mode
-        /// already exists, it is replaced (Open/Closed via extension without modification).
+        /// Registers a strategy for the given animation mode.
+        /// Replaces any existing strategy for that mode.
         /// </summary>
         public void RegisterStrategy(ITypographyAnimationStrategy strategy)
         {
-            // Parse mode from strategy name — strategies self-declare their mode via ModeName.
-            // For type safety, strategies also expose their AnimationMode via a cast check.
-            if (strategy is IAnimationModeProvider modeProvider)
-                _strategies[modeProvider.AnimationMode] = strategy;
-            else
-                Debug.LogWarning($"[TypographyAnimator] Strategy '{strategy.ModeName}' does not " +
-                    "implement IAnimationModeProvider and cannot be registered by mode.");
+            _strategies[strategy.AnimationMode] = strategy;
         }
 
         /// <summary>
         /// Called by <see cref="TextRendererController"/> when new text/config is applied.
-        /// Selects and starts the appropriate strategy.
+        /// Selects and starts the appropriate strategy as a coroutine on this MonoBehaviour.
         /// </summary>
         public void Activate(string text, TypographyConfig config, ITextRenderer renderer)
         {
+            Deactivate();
             _renderer = renderer;
-            _activeStrategy?.Reset();
 
             if (config.Animation == AnimationMode.None) return;
 
@@ -81,55 +76,45 @@ namespace AdapTypeXR.Typography
             _activeStrategy.WordAdvanced += OnWordAdvanced;
             _activeStrategy.AnimationCompleted += OnAnimationCompleted;
             _activeStrategy.Initialise(text, config);
-            _activeStrategy.Start();
+            _activeCoroutine = StartCoroutine(_activeStrategy.CreateRoutine());
         }
 
         /// <summary>Stops the current animation and clears event subscriptions.</summary>
         public void Deactivate()
         {
-            if (_activeStrategy == null) return;
-            _activeStrategy.WordAdvanced -= OnWordAdvanced;
-            _activeStrategy.AnimationCompleted -= OnAnimationCompleted;
-            _activeStrategy.Reset();
-            _activeStrategy = null;
+            if (_activeCoroutine != null)
+            {
+                StopCoroutine(_activeCoroutine);
+                _activeCoroutine = null;
+            }
+
+            if (_activeStrategy != null)
+            {
+                _activeStrategy.Stop();
+                _activeStrategy.WordAdvanced -= OnWordAdvanced;
+                _activeStrategy.AnimationCompleted -= OnAnimationCompleted;
+                _activeStrategy = null;
+            }
         }
 
         // ── Private ────────────────────────────────────────────────────────
 
-        private void OnWordAdvanced(int wordIndex)
-        {
-            _renderer?.HighlightWord(wordIndex);
-        }
-
-        private void OnAnimationCompleted()
-        {
-            _renderer?.ClearHighlight();
-        }
+        private void OnWordAdvanced(int wordIndex) => _renderer?.HighlightWord(wordIndex);
+        private void OnAnimationCompleted() => _renderer?.ClearHighlight();
     }
 
-    // ── Supporting Interface ───────────────────────────────────────────────────
-
-    /// <summary>
-    /// Allows a strategy to declare which <see cref="AnimationMode"/> it handles,
-    /// enabling type-safe registration in <see cref="TypographyAnimator"/>.
-    /// </summary>
-    public interface IAnimationModeProvider
-    {
-        AnimationMode AnimationMode { get; }
-    }
-
-    // ── Built-in Strategies ────────────────────────────────────────────────────
+    // ── Built-in Strategies (plain C# classes) ────────────────────────────────
 
     /// <summary>
     /// Word-by-word highlight strategy.
-    /// Full text is visible; a highlight marker progresses word by word
-    /// at the configured WPM rate, preserving re-reading ability.
+    /// Full text remains visible; a highlight progresses word by word at the
+    /// configured WPM rate, preserving context and re-reading ability.
+    /// Positive evidence for ADHD readers (reduces lost-place errors).
     /// </summary>
-    public sealed class WordByWordHighlightStrategy : MonoBehaviour,
-        ITypographyAnimationStrategy, IAnimationModeProvider
+    public sealed class WordByWordHighlightStrategy : ITypographyAnimationStrategy
     {
-        public string ModeName => "WordByWordHighlight";
         public AnimationMode AnimationMode => AnimationMode.WordByWordHighlight;
+        public string ModeName => "WordByWordHighlight";
 
         public event Action<int>? WordAdvanced;
         public event Action? AnimationCompleted;
@@ -137,57 +122,39 @@ namespace AdapTypeXR.Typography
 
         private string[] _words = Array.Empty<string>();
         private float _secondsPerWord;
-        private int _currentWordIndex;
-        private Coroutine? _coroutine;
 
         public void Initialise(string text, TypographyConfig config)
         {
             _words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             _secondsPerWord = 60f / Mathf.Max(1f, config.WordsPerMinute);
-            _currentWordIndex = 0;
+            IsRunning = false;
         }
 
-        public void Start()
+        public IEnumerator CreateRoutine()
         {
             IsRunning = true;
-            _coroutine = StartCoroutine(HighlightLoop());
-        }
-
-        public void Pause()
-        {
-            IsRunning = false;
-            if (_coroutine != null) StopCoroutine(_coroutine);
-        }
-
-        public void Reset()
-        {
-            Pause();
-            _currentWordIndex = 0;
-        }
-
-        private IEnumerator HighlightLoop()
-        {
-            while (_currentWordIndex < _words.Length)
+            for (int i = 0; i < _words.Length && IsRunning; i++)
             {
-                WordAdvanced?.Invoke(_currentWordIndex);
+                WordAdvanced?.Invoke(i);
                 yield return new WaitForSeconds(_secondsPerWord);
-                _currentWordIndex++;
             }
             IsRunning = false;
             AnimationCompleted?.Invoke();
         }
+
+        public void Stop() => IsRunning = false;
     }
 
     /// <summary>
-    /// RSVP (Rapid Serial Visual Presentation) strategy.
-    /// Displays one word at a time at the centre of the text area.
-    /// Eliminates saccade requirements; rate controlled by WPM.
+    /// Rapid Serial Visual Presentation (RSVP) strategy.
+    /// Signals the renderer to display one word at a time at a fixed position.
+    /// Eliminates the need for saccades; rate controlled by WPM.
+    /// Note: prevents re-reading — comprehension impact varies by profile.
     /// </summary>
-    public sealed class RsvpStrategy : MonoBehaviour,
-        ITypographyAnimationStrategy, IAnimationModeProvider
+    public sealed class RsvpStrategy : ITypographyAnimationStrategy
     {
-        public string ModeName => "RSVP";
         public AnimationMode AnimationMode => AnimationMode.RSVP;
+        public string ModeName => "RSVP";
 
         public event Action<int>? WordAdvanced;
         public event Action? AnimationCompleted;
@@ -195,46 +162,27 @@ namespace AdapTypeXR.Typography
 
         private string[] _words = Array.Empty<string>();
         private float _secondsPerWord;
-        private int _currentWordIndex;
-        private Coroutine? _coroutine;
 
         public void Initialise(string text, TypographyConfig config)
         {
             _words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             _secondsPerWord = 60f / Mathf.Max(1f, config.WordsPerMinute);
-            _currentWordIndex = 0;
+            IsRunning = false;
         }
 
-        public void Start()
+        public IEnumerator CreateRoutine()
         {
             IsRunning = true;
-            _coroutine = StartCoroutine(RsvpLoop());
-        }
-
-        public void Pause()
-        {
-            IsRunning = false;
-            if (_coroutine != null) StopCoroutine(_coroutine);
-        }
-
-        public void Reset()
-        {
-            Pause();
-            _currentWordIndex = 0;
-        }
-
-        private IEnumerator RsvpLoop()
-        {
-            while (_currentWordIndex < _words.Length)
+            for (int i = 0; i < _words.Length && IsRunning; i++)
             {
-                // WordAdvanced here signals the renderer to show only this word.
-                // The TextRendererController handles RSVP display mode separately.
-                WordAdvanced?.Invoke(_currentWordIndex);
+                // WordAdvanced signals the renderer to display only this word (RSVP mode).
+                WordAdvanced?.Invoke(i);
                 yield return new WaitForSeconds(_secondsPerWord);
-                _currentWordIndex++;
             }
             IsRunning = false;
             AnimationCompleted?.Invoke();
         }
+
+        public void Stop() => IsRunning = false;
     }
 }

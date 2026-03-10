@@ -4,7 +4,6 @@ using AdapTypeXR.Core.Events;
 using AdapTypeXR.Core.Interfaces;
 using AdapTypeXR.Core.Models;
 using UnityEngine;
-using UnityEngine.XR.Interaction.Toolkit;
 
 namespace AdapTypeXR.Presenters
 {
@@ -12,12 +11,15 @@ namespace AdapTypeXR.Presenters
     /// Controls the 3D book GameObject in the XR scene.
     /// Manages page navigation, text display, and physical book appearance.
     ///
-    /// The book is composed of page GameObjects, each carrying a
-    /// <see cref="ITextRenderer"/> component. Pages are swapped by
-    /// enabling/disabling GameObjects — no instantiation during reading.
+    /// Page discovery: if <see cref="_pageObjects"/> is empty in the inspector,
+    /// Awake will auto-discover all child GameObjects tagged "BookPage".
+    /// This allows the scene builder to set up the hierarchy without manually
+    /// wiring every page reference.
+    ///
+    /// Page navigation: keyboard (← → arrows) always works in simulation;
+    /// XR controller interaction via the optional interactables is additive.
     ///
     /// Design pattern: Composite — the book is a composite of page presenters.
-    /// Interaction: delegates to XR Interaction Toolkit grab/poke events.
     /// </summary>
     public sealed class BookPresenter : MonoBehaviour, IBookPresenter
     {
@@ -37,18 +39,16 @@ namespace AdapTypeXR.Presenters
 
         // ── Inspector Configuration ────────────────────────────────────────
 
-        [Header("Page References")]
-        [Tooltip("Ordered list of page GameObjects. Each must have an ITextRenderer component.")]
+        [Header("Pages")]
+        [Tooltip("Ordered page GameObjects. Leave empty to auto-discover by 'BookPage' tag.")]
         [SerializeField] private List<GameObject> _pageObjects = new();
 
-        [Tooltip("Physical next-page button collider (poke or grab interaction).")]
-        [SerializeField] private XRSimpleInteractable? _nextPageInteractable;
-
-        [Tooltip("Physical previous-page button collider.")]
-        [SerializeField] private XRSimpleInteractable? _prevPageInteractable;
+        [Header("Keyboard Navigation (Simulation)")]
+        [SerializeField] private KeyCode _nextPageKey = KeyCode.RightArrow;
+        [SerializeField] private KeyCode _prevPageKey = KeyCode.LeftArrow;
 
         [Header("Book Animation")]
-        [Tooltip("Animator controlling the book open/close and page-turn animations.")]
+        [Tooltip("Optional animator for open/close and page-turn animations.")]
         [SerializeField] private Animator? _bookAnimator;
 
         private static readonly int AnimIsOpen = Animator.StringToHash("IsOpen");
@@ -58,7 +58,6 @@ namespace AdapTypeXR.Presenters
 
         private ReadingPassage? _activePassage;
         private TypographyConfig? _activeConfig;
-        private bool _isOpen;
 
         // ── IBookPresenter Properties ──────────────────────────────────────
 
@@ -72,25 +71,19 @@ namespace AdapTypeXR.Presenters
 
         private void Awake()
         {
+            if (_pageObjects.Count == 0)
+                AutoDiscoverPages();
+
             ValidatePageObjects();
         }
 
-        private void OnEnable()
+        private void Update()
         {
-            if (_nextPageInteractable != null)
-                _nextPageInteractable.selectEntered.AddListener(_ => AdvancePage());
-
-            if (_prevPageInteractable != null)
-                _prevPageInteractable.selectEntered.AddListener(_ => ReturnPage());
-        }
-
-        private void OnDisable()
-        {
-            if (_nextPageInteractable != null)
-                _nextPageInteractable.selectEntered.RemoveAllListeners();
-
-            if (_prevPageInteractable != null)
-                _prevPageInteractable.selectEntered.RemoveAllListeners();
+            // Keyboard navigation for simulation and desktop testing.
+            if (Input.GetKeyDown(_nextPageKey))
+                AdvancePage();
+            else if (Input.GetKeyDown(_prevPageKey))
+                ReturnPage();
         }
 
         // ── IBookPresenter Implementation ──────────────────────────────────
@@ -101,7 +94,6 @@ namespace AdapTypeXR.Presenters
             _activePassage = passage;
             CurrentPageIndex = 0;
 
-            // Populate each page GameObject with its text.
             for (int i = 0; i < _pageObjects.Count; i++)
             {
                 bool hasContent = i < passage.Pages.Count;
@@ -109,7 +101,7 @@ namespace AdapTypeXR.Presenters
 
                 if (hasContent && _activeConfig != null)
                 {
-                    var renderer = _pageObjects[i].GetComponent<ITextRenderer>();
+                    var renderer = _pageObjects[i].GetComponentInChildren<ITextRenderer>();
                     renderer?.RenderText(passage.Pages[i], _activeConfig);
                 }
             }
@@ -121,19 +113,19 @@ namespace AdapTypeXR.Presenters
         /// <inheritdoc />
         public void ApplyTypography(TypographyConfig config)
         {
+            var previous = _activeConfig;
             _activeConfig = config;
 
             if (_activePassage == null) return;
 
             for (int i = 0; i < _pageObjects.Count && i < _activePassage.Pages.Count; i++)
             {
-                var renderer = _pageObjects[i].GetComponent<ITextRenderer>();
-                if (renderer != null)
-                    renderer.RenderText(_activePassage.Pages[i], config);
+                var renderer = _pageObjects[i].GetComponentInChildren<ITextRenderer>();
+                renderer?.RenderText(_activePassage.Pages[i], config);
             }
 
-            ReadingEventBus.Instance.Publish(new ConditionChangedEvent(
-                _activeConfig ?? config, config));
+            if (previous != null)
+                ReadingEventBus.Instance.Publish(new ConditionChangedEvent(previous, config));
         }
 
         /// <inheritdoc />
@@ -179,22 +171,26 @@ namespace AdapTypeXR.Presenters
                 _pageObjects[i].SetActive(i == index);
 
             CurrentPageIndex = index;
-
             _bookAnimator?.SetTrigger(AnimPageTurn);
         }
 
-        private void OpenBook()
+        /// <summary>
+        /// Finds all child GameObjects tagged "BookPage" and adds them to the page list.
+        /// Pages are sorted by sibling index (top-down in the hierarchy).
+        /// </summary>
+        private void AutoDiscoverPages()
         {
-            _isOpen = true;
-            _bookAnimator?.SetBool(AnimIsOpen, true);
-            BookOpened?.Invoke();
-        }
+            _pageObjects.Clear();
+            foreach (Transform child in transform)
+            {
+                if (child.CompareTag("BookPage"))
+                    _pageObjects.Add(child.gameObject);
+            }
 
-        private void CloseBook()
-        {
-            _isOpen = false;
-            _bookAnimator?.SetBool(AnimIsOpen, false);
-            BookClosed?.Invoke();
+            if (_pageObjects.Count > 0)
+                Debug.Log($"[BookPresenter] Auto-discovered {_pageObjects.Count} pages by 'BookPage' tag.");
+            else
+                Debug.LogWarning("[BookPresenter] No pages found. Add child objects tagged 'BookPage'.");
         }
 
         private void ValidatePageObjects()
@@ -203,14 +199,13 @@ namespace AdapTypeXR.Presenters
             {
                 if (_pageObjects[i] == null)
                 {
-                    Debug.LogError($"[BookPresenter] Page object at index {i} is null.");
+                    Debug.LogError($"[BookPresenter] Page at index {i} is null.");
                     continue;
                 }
 
-                var renderer = _pageObjects[i].GetComponent<ITextRenderer>();
-                if (renderer == null)
-                    Debug.LogWarning($"[BookPresenter] Page object '{_pageObjects[i].name}' " +
-                        "has no ITextRenderer component. Text will not be rendered on this page.");
+                if (_pageObjects[i].GetComponentInChildren<ITextRenderer>() == null)
+                    Debug.LogWarning($"[BookPresenter] Page '{_pageObjects[i].name}' has no ITextRenderer. " +
+                        "Text will not render on this page.");
             }
         }
     }
