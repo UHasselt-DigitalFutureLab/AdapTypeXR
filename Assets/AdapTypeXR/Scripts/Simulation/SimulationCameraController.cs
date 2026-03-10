@@ -1,24 +1,25 @@
 #nullable enable
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace AdapTypeXR.Simulation
 {
     /// <summary>
     /// Minimal first-person camera controller for desktop simulation.
-    /// Allows the researcher/developer to look around the scene and position
-    /// themselves relative to the book without a headset.
+    /// Uses the Input System package (com.unity.inputsystem).
     ///
     /// Controls:
     ///   Right-click + drag — rotate camera (mouse look)
     ///   W / A / S / D      — move forward / left / back / right
     ///   Q / E              — move down / up
-    ///   Scroll wheel       — move forward / back faster
+    ///   Scroll wheel       — dolly forward / back
+    ///   Left Shift         — move faster
     ///   F                  — snap to default reading position
     /// </summary>
     public sealed class SimulationCameraController : MonoBehaviour
     {
         [Header("Look Settings")]
-        [SerializeField] private float _mouseSensitivity = 2.0f;
+        [SerializeField] private float _mouseSensitivity = 0.15f;
         [SerializeField] private float _pitchClampDeg = 80f;
 
         [Header("Move Settings")]
@@ -27,21 +28,13 @@ namespace AdapTypeXR.Simulation
         [SerializeField] private float _fastMultiplier = 3.0f;
 
         [Header("Default Reading Position")]
-        [Tooltip("Position to snap to when pressing F.")]
         [SerializeField] private Vector3 _defaultPosition = new(0f, 1.7f, 0f);
         [SerializeField] private Vector3 _defaultEulerAngles = new(0f, 0f, 0f);
-
-        // ── State ──────────────────────────────────────────────────────────
 
         private float _yaw;
         private float _pitch;
 
-        // ── Lifecycle ──────────────────────────────────────────────────────
-
-        private void Start()
-        {
-            SnapToDefault();
-        }
+        private void Start() => SnapToDefault();
 
         private void Update()
         {
@@ -49,53 +42,56 @@ namespace AdapTypeXR.Simulation
             HandleKeyboardMove();
             HandleScrollMove();
 
-            if (Input.GetKeyDown(KeyCode.F))
+            if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
                 SnapToDefault();
         }
 
-        // ── Private ────────────────────────────────────────────────────────
-
         private void HandleMouseLook()
         {
-            // Only look while right mouse button is held.
-            if (!Input.GetMouseButton(1)) return;
+            if (Mouse.current == null) return;
+            if (!Mouse.current.rightButton.isPressed) return;
 
-            _yaw += Input.GetAxis("Mouse X") * _mouseSensitivity;
-            _pitch -= Input.GetAxis("Mouse Y") * _mouseSensitivity;
-            _pitch = Mathf.Clamp(_pitch, -_pitchClampDeg, _pitchClampDeg);
+            var delta = Mouse.current.delta.ReadValue();
+            _yaw   += delta.x * _mouseSensitivity;
+            _pitch -= delta.y * _mouseSensitivity;
+            _pitch  = Mathf.Clamp(_pitch, -_pitchClampDeg, _pitchClampDeg);
 
             transform.rotation = Quaternion.Euler(_pitch, _yaw, 0f);
         }
 
         private void HandleKeyboardMove()
         {
+            var kb = Keyboard.current;
+            if (kb == null) return;
+
             float speed = _moveSpeed * Time.deltaTime;
-            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+            if (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed)
                 speed *= _fastMultiplier;
 
             var move = Vector3.zero;
-            if (Input.GetKey(KeyCode.W)) move += transform.forward;
-            if (Input.GetKey(KeyCode.S)) move -= transform.forward;
-            if (Input.GetKey(KeyCode.A)) move -= transform.right;
-            if (Input.GetKey(KeyCode.D)) move += transform.right;
-            if (Input.GetKey(KeyCode.E)) move += Vector3.up;
-            if (Input.GetKey(KeyCode.Q)) move -= Vector3.up;
+            if (kb.wKey.isPressed) move += transform.forward;
+            if (kb.sKey.isPressed) move -= transform.forward;
+            if (kb.aKey.isPressed) move -= transform.right;
+            if (kb.dKey.isPressed) move += transform.right;
+            if (kb.eKey.isPressed) move += Vector3.up;
+            if (kb.qKey.isPressed) move -= Vector3.up;
 
             transform.position += move * speed;
         }
 
         private void HandleScrollMove()
         {
-            float scroll = Input.GetAxis("Mouse ScrollWheel");
+            if (Mouse.current == null) return;
+            float scroll = Mouse.current.scroll.ReadValue().y;
             if (Mathf.Abs(scroll) > 0.001f)
-                transform.position += transform.forward * (scroll * _scrollSpeed);
+                transform.position += transform.forward * (scroll * _scrollSpeed * 0.01f);
         }
 
         private void SnapToDefault()
         {
             transform.position = _defaultPosition;
             transform.eulerAngles = _defaultEulerAngles;
-            _yaw = _defaultEulerAngles.y;
+            _yaw   = _defaultEulerAngles.y;
             _pitch = _defaultEulerAngles.x;
         }
     }

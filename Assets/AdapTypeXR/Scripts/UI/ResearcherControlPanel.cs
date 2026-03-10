@@ -6,6 +6,7 @@ using AdapTypeXR.Core.Models;
 using AdapTypeXR.Typography;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace AdapTypeXR.UI
@@ -240,14 +241,12 @@ namespace AdapTypeXR.UI
 
         private void HandleKeyboardShortcuts()
         {
-            if (Input.GetKeyDown(KeyCode.N))
-                OnNextConditionClicked();
+            var kb = Keyboard.current;
+            if (kb == null) return;
 
-            if (Input.GetKeyDown(KeyCode.P))
-                OnPauseResumeClicked();
-
-            if (Input.GetKeyDown(KeyCode.Tab))
-                TogglePanelVisibility();
+            if (kb.nKey.wasPressedThisFrame) OnNextConditionClicked();
+            if (kb.pKey.wasPressedThisFrame) OnPauseResumeClicked();
+            if (kb.tabKey.wasPressedThisFrame) TogglePanelVisibility();
         }
 
         private void TogglePanelVisibility()

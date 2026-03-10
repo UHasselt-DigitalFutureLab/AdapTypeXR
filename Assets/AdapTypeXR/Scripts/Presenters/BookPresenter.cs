@@ -5,6 +5,7 @@ using AdapTypeXR.Core.Events;
 using AdapTypeXR.Core.Interfaces;
 using AdapTypeXR.Core.Models;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace AdapTypeXR.Presenters
 {
@@ -44,9 +45,7 @@ namespace AdapTypeXR.Presenters
         [Tooltip("Ordered page GameObjects. Leave empty to auto-discover by 'BookPage' tag.")]
         [SerializeField] private List<GameObject> _pageObjects = new();
 
-        [Header("Keyboard Navigation (Simulation)")]
-        [SerializeField] private KeyCode _nextPageKey = KeyCode.RightArrow;
-        [SerializeField] private KeyCode _prevPageKey = KeyCode.LeftArrow;
+        // Keyboard navigation uses the Input System package — no serialised KeyCode needed.
 
         [Header("Book Animation")]
         [Tooltip("Optional animator for open/close and page-turn animations.")]
@@ -80,11 +79,11 @@ namespace AdapTypeXR.Presenters
 
         private void Update()
         {
-            // Keyboard navigation for simulation and desktop testing.
-            if (Input.GetKeyDown(_nextPageKey))
-                AdvancePage();
-            else if (Input.GetKeyDown(_prevPageKey))
-                ReturnPage();
+            // Keyboard navigation using the Input System package.
+            var kb = Keyboard.current;
+            if (kb == null) return;
+            if (kb.rightArrowKey.wasPressedThisFrame) AdvancePage();
+            else if (kb.leftArrowKey.wasPressedThisFrame) ReturnPage();
         }
 
         // ── IBookPresenter Implementation ──────────────────────────────────

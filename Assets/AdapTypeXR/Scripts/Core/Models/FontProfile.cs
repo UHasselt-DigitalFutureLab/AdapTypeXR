@@ -1,4 +1,6 @@
 #nullable enable
+using System.Collections.Generic;
+
 namespace AdapTypeXR.Core.Models
 {
     /// <summary>
