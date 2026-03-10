@@ -40,13 +40,23 @@ namespace AdapTypeXR.Editor
         // Camera starts at standing eye height, looking forward.
         private static readonly Vector3 CameraPosition = new(0f, 1.7f, 0f);
 
-        // Book is 1.5 m in front of the camera, slightly below eye level — comfortable reading angle.
-        private static readonly Vector3 BookPosition = new(0f, 1.4f, 1.5f);
+        // Book sits 1.2 m in front of the camera, tilted -8° to face the reader naturally.
+        private static readonly Vector3 BookPosition  = new(0f, 1.35f, 1.2f);
+        private static readonly Vector3 BookRotation  = new(-8f, 0f, 0f);
 
-        // World-space canvas: 300 × 420 "units" at scale 0.001 = 0.3 m × 0.42 m.
-        private const float CanvasScale = 0.001f;
-        private const float CanvasWidth = 300f;
-        private const float CanvasHeight = 420f;
+        // Single page canvas: 148 × 400 units at scale 0.001 = 0.148 m × 0.400 m.
+        private const float CanvasScale  = 0.001f;
+        private const float CanvasWidth  = 148f;
+        private const float CanvasHeight = 400f;
+
+        // Half-book offset: each page canvas is shifted left/right from the book centre.
+        private const float PageOffsetX = 0.087f;   // world-space metres
+
+        // Book physical dimensions (world space).
+        private const float CoverW = 0.360f;
+        private const float CoverH = 0.430f;
+        private const float CoverD = 0.022f;
+        private const float SpineW = 0.028f;
 
         // ── Menu Entry Point ───────────────────────────────────────────────
 
@@ -140,94 +150,223 @@ namespace AdapTypeXR.Editor
 
         private static GameObject CreateBook(Camera mainCamera)
         {
-            // Root book object.
             var book = new GameObject("Book");
             book.transform.position = BookPosition;
+            book.transform.eulerAngles = BookRotation;
             book.AddComponent<BookPresenter>();
 
-            // Visual background — a dark quad behind the pages to frame them.
-            CreateBookBackground(book.transform);
+            // 3-D hardcover geometry (purely visual, no colliders that block gaze).
+            CreateBookGeometry(book.transform);
 
-            // Three pages (enough for a demo passage; BookPresenter auto-discovers by tag).
-            for (int i = 0; i < 3; i++)
-                CreatePage(book.transform, i, mainCamera);
+            // Left page — decorative title page, NOT a BookPage (never shows poem text).
+            CreateTitlePage(book.transform, mainCamera);
+
+            // Right pages — interactive BookPages auto-discovered by tag.
+            // Two pages cover the two-stanza split of the Frost poem.
+            for (int i = 0; i < 2; i++)
+                CreateTextPage(book.transform, i, mainCamera);
 
             return book;
         }
 
-        private static void CreateBookBackground(Transform parent)
+        // ── Book Geometry ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Builds the physical book shape from Unity primitives:
+        /// hardcover body, spine crease, left/right page-stack edges.
+        /// All geometry sits behind the text canvases (positive local Z).
+        /// </summary>
+        private static void CreateBookGeometry(Transform parent)
         {
-            var bg = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            bg.name = "BookBackground";
-            bg.transform.SetParent(parent, false);
-            bg.transform.localPosition = new Vector3(0f, 0f, 0.002f); // Slightly behind pages.
-            bg.transform.localScale = new Vector3(0.34f, 0.45f, 1f);
+            // Shared materials.
+            var coverMat = MakeMaterial(new Color(0.13f, 0.22f, 0.14f));   // dark forest green
+            var spineMat  = MakeMaterial(new Color(0.09f, 0.15f, 0.10f));   // deeper green
+            var pageMat   = MakeMaterial(new Color(0.94f, 0.91f, 0.84f));   // aged cream
+            var edgeMat   = MakeMaterial(new Color(0.85f, 0.82f, 0.75f));   // page-edge shadow
 
-            // Cream/off-white book material.
-            var renderer = bg.GetComponent<MeshRenderer>();
-            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            if (mat.shader.name == "Hidden/InternalErrorShader")
-                mat = new Material(Shader.Find("Standard")); // Fallback for non-URP projects.
-            mat.color = new Color(0.95f, 0.93f, 0.87f);
-            renderer.sharedMaterial = mat;
+            // ── Hardcover body ─────────────────────────────────────────────
+            var cover = MakePrimitive(PrimitiveType.Cube, "Cover", parent,
+                Vector3.zero, new Vector3(CoverW, CoverH, CoverD), coverMat);
+            // The cover sits behind everything at z = CoverD/2 (centre of cube).
 
-            // Remove collider — background should not intercept gaze rays.
-            Object.DestroyImmediate(bg.GetComponent<Collider>());
+            // ── Spine crease (thin dark strip down the centre) ─────────────
+            MakePrimitive(PrimitiveType.Cube, "Spine_Crease", parent,
+                new Vector3(0f, 0f, -(CoverD * 0.5f + 0.001f)),
+                new Vector3(SpineW, CoverH + 0.002f, 0.004f), spineMat);
+
+            // ── Page-block surfaces (the cream face you read on) ───────────
+            // Left page surface
+            MakePrimitive(PrimitiveType.Quad, "PageFace_Left", parent,
+                new Vector3(-PageOffsetX, 0f, -(CoverD * 0.5f + 0.002f)),
+                new Vector3(CoverW * 0.5f - SpineW * 0.5f - 0.003f, CoverH - 0.018f, 1f),
+                pageMat);
+
+            // Right page surface
+            MakePrimitive(PrimitiveType.Quad, "PageFace_Right", parent,
+                new Vector3(+PageOffsetX, 0f, -(CoverD * 0.5f + 0.002f)),
+                new Vector3(CoverW * 0.5f - SpineW * 0.5f - 0.003f, CoverH - 0.018f, 1f),
+                pageMat);
+
+            // ── Page-stack edge strips (visible thickness of pages) ────────
+            float edgeX   = CoverW * 0.5f - 0.005f;
+            float edgeH   = CoverH - 0.022f;
+            float edgeD   = CoverD - 0.006f;
+
+            MakePrimitive(PrimitiveType.Cube, "PageEdge_Left", parent,
+                new Vector3(-edgeX, 0f, 0f), new Vector3(0.008f, edgeH, edgeD), edgeMat);
+            MakePrimitive(PrimitiveType.Cube, "PageEdge_Right", parent,
+                new Vector3(+edgeX, 0f, 0f), new Vector3(0.008f, edgeH, edgeD), edgeMat);
+
+            // ── Top/bottom cover lip (shows hardcover extends beyond pages) ─
+            float lipY = CoverH * 0.5f;
+            MakePrimitive(PrimitiveType.Cube, "CoverLip_Top", parent,
+                new Vector3(0f, +lipY, 0f), new Vector3(CoverW, 0.012f, CoverD), coverMat);
+            MakePrimitive(PrimitiveType.Cube, "CoverLip_Bottom", parent,
+                new Vector3(0f, -lipY, 0f), new Vector3(CoverW, 0.012f, CoverD), coverMat);
         }
 
-        private static void CreatePage(Transform bookParent, int index, Camera mainCamera)
+        // ── Page Builders ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Left page — static decorative title page.
+        /// Not tagged BookPage; the BookPresenter ignores it.
+        /// Shows the poem title and author in a typographically styled canvas.
+        /// </summary>
+        private static void CreateTitlePage(Transform bookParent, Camera mainCamera)
         {
-            // Page root — tagged for auto-discovery by BookPresenter.
-            var page = new GameObject($"Page_{index}");
+            var page = new GameObject("TitlePage_Left");
             page.transform.SetParent(bookParent, false);
-            page.transform.localPosition = Vector3.zero;
-            page.tag = "BookPage";
+            page.transform.localPosition = new Vector3(-PageOffsetX, 0f, -(CoverD * 0.5f + 0.004f));
+            page.transform.localScale = Vector3.one * CanvasScale;
 
-            // Thin box collider for gaze raycast detection.
-            var col = page.AddComponent<BoxCollider>();
-            col.size = new Vector3(CanvasWidth * CanvasScale, CanvasHeight * CanvasScale, 0.002f);
-
-            // World-space canvas for TMP text rendering.
             var canvas = page.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.worldCamera = mainCamera;
 
-            var canvasRt = page.GetComponent<RectTransform>();
-            canvasRt.sizeDelta = new Vector2(CanvasWidth, CanvasHeight);
-            page.transform.localScale = Vector3.one * CanvasScale;
+            var rt = page.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(CanvasWidth, CanvasHeight);
 
             var scaler = page.AddComponent<CanvasScaler>();
-            scaler.dynamicPixelsPerUnit = 300f; // High-DPI for crisp SDF text.
+            scaler.dynamicPixelsPerUnit = 300f;
+
+            // Title text.
+            var titleGo = new GameObject("Title");
+            titleGo.transform.SetParent(page.transform, false);
+            var titleRt = titleGo.AddComponent<RectTransform>();
+            titleRt.anchorMin = new Vector2(0f, 0.55f);
+            titleRt.anchorMax = new Vector2(1f, 0.95f);
+            titleRt.offsetMin = new Vector2(14f, 0f);
+            titleRt.offsetMax = new Vector2(-14f, 0f);
+            var titleTmp = titleGo.AddComponent<TextMeshProUGUI>();
+            titleTmp.text = "The Road\nNot Taken";
+            titleTmp.fontSize = 28f;
+            titleTmp.fontStyle = FontStyles.Bold | FontStyles.Italic;
+            titleTmp.color = new Color(0.12f, 0.10f, 0.08f);
+            titleTmp.alignment = TextAlignmentOptions.Center;
+            titleTmp.enableWordWrapping = true;
+
+            // Rule line (thin horizontal divider).
+            var ruleGo = new GameObject("Rule");
+            ruleGo.transform.SetParent(page.transform, false);
+            var ruleRt = ruleGo.AddComponent<RectTransform>();
+            ruleRt.anchorMin = new Vector2(0.1f, 0.52f);
+            ruleRt.anchorMax = new Vector2(0.9f, 0.53f);
+            ruleRt.offsetMin = ruleRt.offsetMax = Vector2.zero;
+            var ruleImg = ruleGo.AddComponent<UnityEngine.UI.Image>();
+            ruleImg.color = new Color(0.35f, 0.28f, 0.18f, 0.6f);
+
+            // Author text.
+            var authorGo = new GameObject("Author");
+            authorGo.transform.SetParent(page.transform, false);
+            var authorRt = authorGo.AddComponent<RectTransform>();
+            authorRt.anchorMin = new Vector2(0f, 0.42f);
+            authorRt.anchorMax = new Vector2(1f, 0.52f);
+            authorRt.offsetMin = new Vector2(14f, 0f);
+            authorRt.offsetMax = new Vector2(-14f, 0f);
+            var authorTmp = authorGo.AddComponent<TextMeshProUGUI>();
+            authorTmp.text = "Robert Frost · 1916";
+            authorTmp.fontSize = 13f;
+            authorTmp.fontStyle = FontStyles.Italic;
+            authorTmp.color = new Color(0.30f, 0.24f, 0.16f);
+            authorTmp.alignment = TextAlignmentOptions.Center;
+
+            // Page number.
+            var pageNumGo = new GameObject("PageNumber");
+            pageNumGo.transform.SetParent(page.transform, false);
+            var pageNumRt = pageNumGo.AddComponent<RectTransform>();
+            pageNumRt.anchorMin = new Vector2(0f, 0.02f);
+            pageNumRt.anchorMax = new Vector2(1f, 0.08f);
+            pageNumRt.offsetMin = pageNumRt.offsetMax = Vector2.zero;
+            var pageNumTmp = pageNumGo.AddComponent<TextMeshProUGUI>();
+            pageNumTmp.text = "i";
+            pageNumTmp.fontSize = 11f;
+            pageNumTmp.color = new Color(0.45f, 0.38f, 0.28f);
+            pageNumTmp.alignment = TextAlignmentOptions.Center;
+        }
+
+        /// <summary>
+        /// Right-side interactive text page.
+        /// Tagged "BookPage" so BookPresenter auto-discovers and populates it.
+        /// </summary>
+        private static void CreateTextPage(Transform bookParent, int index, Camera mainCamera)
+        {
+            var page = new GameObject($"Page_{index}");
+            page.transform.SetParent(bookParent, false);
+            page.transform.localPosition = new Vector3(+PageOffsetX, 0f, -(CoverD * 0.5f + 0.004f));
+            page.transform.localScale = Vector3.one * CanvasScale;
+            page.tag = "BookPage";
+
+            // Collider for gaze raycast detection.
+            var col = page.AddComponent<BoxCollider>();
+            col.size = new Vector3(CanvasWidth, CanvasHeight, 2f);
+
+            var canvas = page.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = mainCamera;
+
+            var rt = page.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(CanvasWidth, CanvasHeight);
+
+            var scaler = page.AddComponent<CanvasScaler>();
+            scaler.dynamicPixelsPerUnit = 300f;
 
             page.AddComponent<GraphicRaycaster>();
 
-            // Text area (child of canvas).
+            // Text area fills the page with a small margin.
             var textGo = new GameObject("TextArea");
             textGo.transform.SetParent(page.transform, false);
-
             var textRt = textGo.AddComponent<RectTransform>();
             textRt.anchorMin = Vector2.zero;
             textRt.anchorMax = Vector2.one;
-            textRt.offsetMin = new Vector2(20f, 20f);
-            textRt.offsetMax = new Vector2(-20f, -20f);
+            textRt.offsetMin = new Vector2(16f, 24f);
+            textRt.offsetMax = new Vector2(-10f, -16f);
 
-            // TextMeshProUGUI — RequireComponent on TextRendererController adds this automatically,
-            // but we add it first so we can configure it.
             var tmp = textGo.AddComponent<TextMeshProUGUI>();
-            tmp.text = index == 0
-                ? "Loading passage…"
-                : $"[Page {index + 1}]";
-            tmp.fontSize = 24f;
-            tmp.color = new Color(0.08f, 0.08f, 0.08f);
+            tmp.text = index == 0 ? "Loading…" : "";
+            tmp.fontSize = 18f;
+            tmp.color = new Color(0.08f, 0.07f, 0.05f);
             tmp.enableWordWrapping = true;
             tmp.overflowMode = TextOverflowModes.Overflow;
             tmp.alignment = TextAlignmentOptions.TopLeft;
+            tmp.lineSpacing = 8f;
 
-            // TextRendererController + TypographyAnimator handle all further styling.
             textGo.AddComponent<TextRendererController>();
             textGo.AddComponent<TypographyAnimator>();
 
-            // Only page 0 is visible initially.
+            // Page number label at bottom.
+            var numGo = new GameObject("PageNumber");
+            numGo.transform.SetParent(page.transform, false);
+            var numRt = numGo.AddComponent<RectTransform>();
+            numRt.anchorMin = new Vector2(0f, 0f);
+            numRt.anchorMax = new Vector2(1f, 0.06f);
+            numRt.offsetMin = new Vector2(10f, 4f);
+            numRt.offsetMax = new Vector2(-10f, -2f);
+            var numTmp = numGo.AddComponent<TextMeshProUGUI>();
+            numTmp.text = (index + 1).ToString();
+            numTmp.fontSize = 11f;
+            numTmp.color = new Color(0.45f, 0.38f, 0.28f);
+            numTmp.alignment = TextAlignmentOptions.Center;
+
             page.SetActive(index == 0);
         }
 
@@ -439,6 +578,33 @@ namespace AdapTypeXR.Editor
 
             var img = go.AddComponent<Image>();
             img.color = new Color(1f, 1f, 1f, 0.15f);
+        }
+
+        // ── Primitive / Material Helpers ───────────────────────────────────
+
+        private static GameObject MakePrimitive(
+            PrimitiveType type, string name, Transform parent,
+            Vector3 localPos, Vector3 localScale, Material mat)
+        {
+            var go = GameObject.CreatePrimitive(type);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localScale = localScale;
+            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+            // Remove collider — geometry is decorative, must not block gaze raycasts.
+            var col = go.GetComponent<Collider>();
+            if (col != null) Object.DestroyImmediate(col);
+            return go;
+        }
+
+        private static Material MakeMaterial(Color colour)
+        {
+            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            if (mat.shader.name == "Hidden/InternalErrorShader")
+                mat = new Material(Shader.Find("Standard"));
+            mat.color = colour;
+            return mat;
         }
 
         // ── Utilities ──────────────────────────────────────────────────────
