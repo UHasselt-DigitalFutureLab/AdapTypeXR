@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using AdapTypeXR.Core.Interfaces;
 using AdapTypeXR.Core.Models;

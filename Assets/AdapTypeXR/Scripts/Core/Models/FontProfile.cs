@@ -1,3 +1,4 @@
+#nullable enable
 namespace AdapTypeXR.Core.Models
 {
     /// <summary>
