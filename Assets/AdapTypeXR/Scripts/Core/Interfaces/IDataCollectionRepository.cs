@@ -38,6 +38,12 @@ namespace AdapTypeXR.Core.Interfaces
         Task EndSessionAsync();
 
         /// <summary>
+        /// Persists a participant's response to a comprehension question.
+        /// </summary>
+        /// <param name="response">The comprehension response to store.</param>
+        Task RecordComprehensionResponseAsync(ComprehensionResponse response);
+
+        /// <summary>
         /// Retrieves all sessions available in the data store.
         /// Intended for offline analysis tooling, not real-time use.
         /// </summary>

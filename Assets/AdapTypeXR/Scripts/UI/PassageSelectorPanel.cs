@@ -1,9 +1,9 @@
 #nullable enable
+using System;
 using System.Collections.Generic;
-using AdapTypeXR.Core.Interfaces;
+using AdapTypeXR.Core;
 using AdapTypeXR.Core.Models;
 using AdapTypeXR.Presenters;
-using AdapTypeXR.Typography;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -12,39 +12,42 @@ using UnityEngine.UI;
 namespace AdapTypeXR.UI
 {
     /// <summary>
-    /// Toggleable font-selection panel that builds its own Canvas and UI at runtime.
+    /// 3D world-space passage selection panel for XR environments.
     ///
-    /// Reads the font catalogue from <see cref="FontProfileFactory.BuildFontSelectorCatalogue"/>
-    /// and applies the chosen <see cref="TypographyConfig"/> to the active
-    /// <see cref="IBookPresenter"/> without coupling the presenter to UI concerns.
+    /// Builds a world-space Canvas at runtime, positioned to the left of the book.
+    /// Reads passages from <see cref="PassageLibrary.GetAllPassages"/> and loads
+    /// the chosen passage into the active <see cref="BookPresenter"/>.
     ///
-    /// Toggle: F1 key (override via inspector).
-    ///
-    /// Collaboration: READSEARCH (Ann Bessemans, PXL-MAD / UHasselt)
-    ///             ×  Digital Future Lab (UHasselt)
-    ///
-    /// Design pattern: Strategy — font configs are interchangeable strategies
-    ///                 applied to the book without modifying the book.
+    /// Toggle: F2 key.
     /// </summary>
-    public sealed class FontSelectorPanel : MonoBehaviour
+    public sealed class PassageSelectorPanel : MonoBehaviour
     {
         [Header("Toggle")]
-        [Tooltip("Key that shows/hides the font selector panel.")]
-        [SerializeField] private Key _toggleKey = Key.F1;
+        [Tooltip("Key that shows/hides the passage selector panel.")]
+        [SerializeField] private Key _toggleKey = Key.F2;
+
+        [Header("Panel Dimensions (world units)")]
+        [SerializeField] private float _panelWidth = 0.40f;
+        [SerializeField] private float _panelHeight = 0.45f;
+
+        // ── Events ──────────────────────────────────────────────────────────
+
+        /// <summary>Raised when the researcher selects a passage.</summary>
+        public event Action<ReadingPassage>? PassageSelected;
 
         // ── Runtime State ──────────────────────────────────────────────────
 
-        private IBookPresenter? _bookPresenter;
+        private BookPresenter? _bookPresenter;
         private GameObject? _panelRoot;
         private TextMeshProUGUI? _selectedLabel;
         private Transform? _buttonContainer;
 
-        private readonly List<FontEntry> _entries = new();
+        private readonly List<PassageEntry> _entries = new();
         private int _activeIndex = -1;
 
-        private struct FontEntry
+        private struct PassageEntry
         {
-            public TypographyConfig Config;
+            public ReadingPassage Passage;
             public Image Background;
         }
 
@@ -52,14 +55,13 @@ namespace AdapTypeXR.UI
 
         private void Awake()
         {
-            BuildCanvas();
+            BuildWorldCanvas();
         }
 
         private void Start()
         {
             _bookPresenter = FindFirstObjectByType<BookPresenter>();
             PopulateButtons();
-            if (_entries.Count > 0) Apply(0);
         }
 
         private void Update()
@@ -71,35 +73,33 @@ namespace AdapTypeXR.UI
 
         // ── Public API ─────────────────────────────────────────────────────
 
-        /// <summary>Shows or hides the font selector panel.</summary>
+        /// <summary>Shows or hides the passage selector panel.</summary>
         public void Toggle() =>
             _panelRoot?.SetActive(!(_panelRoot.activeSelf));
 
-        // ── Canvas Builder ─────────────────────────────────────────────────
+        // ── World Canvas Builder ────────────────────────────────────────────
 
-        private void BuildCanvas()
+        private void BuildWorldCanvas()
         {
             var canvas = gameObject.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 25;
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.sortingOrder = 24;
 
-            var scaler = gameObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.matchWidthOrHeight = 0.5f;
+            var canvasRt = GetComponent<RectTransform>();
+            float pixelsPerUnit = 1000f;
+            canvasRt.sizeDelta = new Vector2(_panelWidth * pixelsPerUnit, _panelHeight * pixelsPerUnit);
+            transform.localScale = Vector3.one / pixelsPerUnit;
 
             gameObject.AddComponent<GraphicRaycaster>();
 
-            // ── Panel root: right-centre aligned ──────────────────────────
             _panelRoot = new GameObject("Panel");
             _panelRoot.transform.SetParent(transform, false);
 
             var panelRt = _panelRoot.AddComponent<RectTransform>();
-            panelRt.anchorMin = new Vector2(1f, 0.5f);
-            panelRt.anchorMax = new Vector2(1f, 0.5f);
-            panelRt.pivot     = new Vector2(1f, 0.5f);
-            panelRt.anchoredPosition = new Vector2(-12f, 0f);
-            panelRt.sizeDelta = new Vector2(264f, 490f);
+            panelRt.anchorMin = Vector2.zero;
+            panelRt.anchorMax = Vector2.one;
+            panelRt.offsetMin = Vector2.zero;
+            panelRt.offsetMax = Vector2.zero;
 
             var panelBg = _panelRoot.AddComponent<Image>();
             panelBg.color = new Color(0.06f, 0.06f, 0.08f, 0.93f);
@@ -112,70 +112,56 @@ namespace AdapTypeXR.UI
         {
             if (_panelRoot == null) return;
 
-            // ── Title ──────────────────────────────────────────────────────
+            // Title
             var titleGo = new GameObject("Title");
             titleGo.transform.SetParent(_panelRoot.transform, false);
             var titleRt = titleGo.AddComponent<RectTransform>();
             titleRt.anchorMin = new Vector2(0f, 1f);
             titleRt.anchorMax = new Vector2(1f, 1f);
-            titleRt.offsetMin = new Vector2(12f, -38f);
-            titleRt.offsetMax = new Vector2(-12f,  -8f);
+            titleRt.offsetMin = new Vector2(16f, -48f);
+            titleRt.offsetMax = new Vector2(-16f, -10f);
             var titleTmp = titleGo.AddComponent<TextMeshProUGUI>();
-            titleTmp.text = "Lettertype kiezen";
-            titleTmp.fontSize = 14f;
+            titleTmp.text = "Tekst kiezen";
+            titleTmp.fontSize = 22f;
             titleTmp.fontStyle = FontStyles.Bold;
             titleTmp.color = Color.white;
 
-            // ── Hairline separator ─────────────────────────────────────────
+            // Separator
             var sep = new GameObject("Sep");
             sep.transform.SetParent(_panelRoot.transform, false);
             var sepRt = sep.AddComponent<RectTransform>();
             sepRt.anchorMin = new Vector2(0f, 1f);
             sepRt.anchorMax = new Vector2(1f, 1f);
-            sepRt.offsetMin = new Vector2(10f, -41f);
-            sepRt.offsetMax = new Vector2(-10f, -40f);
+            sepRt.offsetMin = new Vector2(12f, -52f);
+            sepRt.offsetMax = new Vector2(-12f, -51f);
             sep.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.18f);
 
-            // ── Active font label ──────────────────────────────────────────
-            var selGo = new GameObject("ActiveFont");
+            // Active passage label
+            var selGo = new GameObject("ActivePassage");
             selGo.transform.SetParent(_panelRoot.transform, false);
             var selRt = selGo.AddComponent<RectTransform>();
             selRt.anchorMin = new Vector2(0f, 1f);
             selRt.anchorMax = new Vector2(1f, 1f);
-            selRt.offsetMin = new Vector2(12f, -58f);
-            selRt.offsetMax = new Vector2(-12f, -43f);
+            selRt.offsetMin = new Vector2(16f, -74f);
+            selRt.offsetMax = new Vector2(-16f, -54f);
             _selectedLabel = selGo.AddComponent<TextMeshProUGUI>();
-            _selectedLabel.text = "—";
-            _selectedLabel.fontSize = 9.5f;
-            _selectedLabel.color = new Color(0.55f, 0.78f, 1f);
+            _selectedLabel.text = "\u2014";
+            _selectedLabel.fontSize = 15f;
+            _selectedLabel.color = new Color(0.78f, 0.88f, 0.55f);
             _selectedLabel.enableWordWrapping = false;
             _selectedLabel.overflowMode = TextOverflowModes.Ellipsis;
 
-            // ── Credit line at bottom ──────────────────────────────────────
-            var creditGo = new GameObject("Credit");
-            creditGo.transform.SetParent(_panelRoot.transform, false);
-            var creditRt = creditGo.AddComponent<RectTransform>();
-            creditRt.anchorMin = new Vector2(0f, 0f);
-            creditRt.anchorMax = new Vector2(1f, 0f);
-            creditRt.offsetMin = new Vector2(8f, 22f);
-            creditRt.offsetMax = new Vector2(-8f, 36f);
-            var creditTmp = creditGo.AddComponent<TextMeshProUGUI>();
-            creditTmp.text = "READSEARCH  ×  Digital Future Lab";
-            creditTmp.fontSize = 7.5f;
-            creditTmp.color = new Color(0.42f, 0.42f, 0.47f);
-            creditTmp.alignment = TextAlignmentOptions.Center;
-
-            // ── Toggle hint ────────────────────────────────────────────────
+            // Toggle hint at bottom
             var hintGo = new GameObject("Hint");
             hintGo.transform.SetParent(_panelRoot.transform, false);
             var hintRt = hintGo.AddComponent<RectTransform>();
             hintRt.anchorMin = new Vector2(0f, 0f);
             hintRt.anchorMax = new Vector2(1f, 0f);
-            hintRt.offsetMin = new Vector2(8f, 7f);
-            hintRt.offsetMax = new Vector2(-8f, 21f);
+            hintRt.offsetMin = new Vector2(8f, 8f);
+            hintRt.offsetMax = new Vector2(-8f, 26f);
             var hintTmp = hintGo.AddComponent<TextMeshProUGUI>();
-            hintTmp.text = "[F1] verberg / toon panel";
-            hintTmp.fontSize = 7.5f;
+            hintTmp.text = "[F2] verberg / toon panel";
+            hintTmp.fontSize = 12f;
             hintTmp.color = new Color(0.32f, 0.32f, 0.36f);
             hintTmp.alignment = TextAlignmentOptions.Center;
         }
@@ -184,16 +170,14 @@ namespace AdapTypeXR.UI
         {
             if (_panelRoot == null) return;
 
-            // ── Scroll root ────────────────────────────────────────────────
             var scrollGo = new GameObject("Scroll");
             scrollGo.transform.SetParent(_panelRoot.transform, false);
             var scrollRt = scrollGo.AddComponent<RectTransform>();
             scrollRt.anchorMin = new Vector2(0f, 0f);
             scrollRt.anchorMax = new Vector2(1f, 1f);
-            scrollRt.offsetMin = new Vector2(6f, 44f);
-            scrollRt.offsetMax = new Vector2(-6f, -62f);
+            scrollRt.offsetMin = new Vector2(8f, 34f);
+            scrollRt.offsetMax = new Vector2(-8f, -78f);
 
-            // Invisible background required by Mask.
             var maskBg = scrollGo.AddComponent<Image>();
             maskBg.color = new Color(0f, 0f, 0f, 0.01f);
             scrollGo.AddComponent<Mask>().showMaskGraphic = false;
@@ -204,23 +188,22 @@ namespace AdapTypeXR.UI
             scroll.scrollSensitivity = 22f;
             scroll.movementType = ScrollRect.MovementType.Clamped;
 
-            // ── Content container ──────────────────────────────────────────
             var contentGo = new GameObject("Content");
             contentGo.transform.SetParent(scrollGo.transform, false);
             var contentRt = contentGo.AddComponent<RectTransform>();
             contentRt.anchorMin = new Vector2(0f, 1f);
             contentRt.anchorMax = new Vector2(1f, 1f);
-            contentRt.pivot     = new Vector2(0.5f, 1f);
+            contentRt.pivot = new Vector2(0.5f, 1f);
             contentRt.offsetMin = Vector2.zero;
             contentRt.offsetMax = Vector2.zero;
 
             var layout = contentGo.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 4f;
+            layout.spacing = 6f;
             layout.padding = new RectOffset(0, 0, 4, 4);
             layout.childControlHeight = false;
-            layout.childControlWidth  = true;
+            layout.childControlWidth = true;
             layout.childForceExpandHeight = false;
-            layout.childForceExpandWidth  = true;
+            layout.childForceExpandWidth = true;
 
             var fitter = contentGo.AddComponent<ContentSizeFitter>();
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -235,20 +218,20 @@ namespace AdapTypeXR.UI
         {
             if (_buttonContainer == null) return;
 
-            var configs = FontProfileFactory.BuildFontSelectorCatalogue();
-            foreach (var cfg in configs)
-                AddFontButton(cfg);
+            var passages = PassageLibrary.GetAllPassages();
+            foreach (var passage in passages)
+                AddPassageButton(passage);
         }
 
-        private void AddFontButton(TypographyConfig config)
+        private void AddPassageButton(ReadingPassage passage)
         {
             if (_buttonContainer == null) return;
 
-            var btnGo = new GameObject(config.ConditionId);
+            var btnGo = new GameObject(passage.PassageId);
             btnGo.transform.SetParent(_buttonContainer, false);
 
             var rt = btnGo.AddComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(0f, 42f);
+            rt.sizeDelta = new Vector2(0f, 62f);
 
             var bg = btnGo.AddComponent<Image>();
             bg.color = new Color(0.14f, 0.14f, 0.17f, 0.92f);
@@ -256,28 +239,43 @@ namespace AdapTypeXR.UI
             var btn = btnGo.AddComponent<Button>();
             btn.targetGraphic = bg;
             var cols = btn.colors;
-            cols.normalColor      = new Color(0.14f, 0.14f, 0.17f, 0.92f);
+            cols.normalColor = new Color(0.14f, 0.14f, 0.17f, 0.92f);
             cols.highlightedColor = new Color(0.22f, 0.22f, 0.28f, 1f);
-            cols.pressedColor     = new Color(0.10f, 0.10f, 0.13f, 1f);
+            cols.pressedColor = new Color(0.10f, 0.10f, 0.13f, 1f);
             btn.colors = cols;
 
-            // Label
+            // Title label
             var labelGo = new GameObject("Label");
             labelGo.transform.SetParent(btnGo.transform, false);
             var labelRt = labelGo.AddComponent<RectTransform>();
-            labelRt.anchorMin = Vector2.zero;
-            labelRt.anchorMax = Vector2.one;
-            labelRt.offsetMin = new Vector2(10f, 3f);
-            labelRt.offsetMax = new Vector2(-10f, -3f);
+            labelRt.anchorMin = new Vector2(0f, 0.4f);
+            labelRt.anchorMax = new Vector2(1f, 1f);
+            labelRt.offsetMin = new Vector2(14f, 0f);
+            labelRt.offsetMax = new Vector2(-14f, -4f);
             var labelTmp = labelGo.AddComponent<TextMeshProUGUI>();
-            labelTmp.text = config.DisplayName;
-            labelTmp.fontSize = 10.5f;
+            labelTmp.text = passage.Title;
+            labelTmp.fontSize = 15f;
             labelTmp.color = new Color(0.88f, 0.88f, 0.90f);
             labelTmp.enableWordWrapping = true;
             labelTmp.alignment = TextAlignmentOptions.Left;
 
+            // Metadata line
+            var metaGo = new GameObject("Meta");
+            metaGo.transform.SetParent(btnGo.transform, false);
+            var metaRt = metaGo.AddComponent<RectTransform>();
+            metaRt.anchorMin = new Vector2(0f, 0f);
+            metaRt.anchorMax = new Vector2(1f, 0.4f);
+            metaRt.offsetMin = new Vector2(14f, 4f);
+            metaRt.offsetMax = new Vector2(-14f, 0f);
+            var metaTmp = metaGo.AddComponent<TextMeshProUGUI>();
+            metaTmp.text = $"{passage.WordCount} woorden  |  {passage.Pages.Count} pagina's  |  FK {passage.FleschKincaidGradeLevel:F1}";
+            metaTmp.fontSize = 11f;
+            metaTmp.color = new Color(0.55f, 0.55f, 0.60f);
+            metaTmp.enableWordWrapping = false;
+            metaTmp.alignment = TextAlignmentOptions.Left;
+
             int index = _entries.Count;
-            _entries.Add(new FontEntry { Config = config, Background = bg });
+            _entries.Add(new PassageEntry { Passage = passage, Background = bg });
             btn.onClick.AddListener(() => Apply(index));
         }
 
@@ -288,12 +286,14 @@ namespace AdapTypeXR.UI
             if (index < 0 || index >= _entries.Count || _bookPresenter == null) return;
 
             _activeIndex = index;
-            _bookPresenter.ApplyTypography(_entries[index].Config);
+            var passage = _entries[index].Passage;
+            _bookPresenter.LoadPassage(passage);
 
             if (_selectedLabel != null)
-                _selectedLabel.text = _entries[index].Config.DisplayName;
+                _selectedLabel.text = passage.Title;
 
             RefreshHighlights();
+            PassageSelected?.Invoke(passage);
         }
 
         private void RefreshHighlights()
@@ -301,7 +301,7 @@ namespace AdapTypeXR.UI
             for (int i = 0; i < _entries.Count; i++)
             {
                 _entries[i].Background.color = i == _activeIndex
-                    ? new Color(0.18f, 0.36f, 0.62f, 0.96f)
+                    ? new Color(0.28f, 0.46f, 0.22f, 0.96f)
                     : new Color(0.14f, 0.14f, 0.17f, 0.92f);
             }
         }

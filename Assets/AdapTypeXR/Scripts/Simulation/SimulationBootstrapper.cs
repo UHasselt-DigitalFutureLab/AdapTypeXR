@@ -7,6 +7,7 @@ using AdapTypeXR.Presenters;
 using AdapTypeXR.Repositories;
 using AdapTypeXR.Services;
 using AdapTypeXR.Typography;
+using AdapTypeXR.UI;
 using UnityEngine;
 
 namespace AdapTypeXR.Simulation
@@ -41,6 +42,7 @@ namespace AdapTypeXR.Simulation
         private ReadingSessionController? _sessionController;
         private BookPresenter? _bookPresenter;
         private CsvDataCollectionRepository? _repository;
+        private ComprehensionQuestionPanel? _comprehensionPanel;
 
         // ── Lifecycle ──────────────────────────────────────────────────────
 
@@ -53,11 +55,11 @@ namespace AdapTypeXR.Simulation
         {
             // Load content immediately so it is visible even if session wiring or
             // data recording fails. This is the guaranteed visual fallback.
-            var passage = PassageLibrary.BoemPaukenslag();
+            var passage = PassageLibrary.DePaepeWatHelpt();
             if (_bookPresenter != null)
             {
                 _bookPresenter.LoadPassage(passage);
-                _bookPresenter.ApplyTypography(FontProfileFactory.CreateEBGaramondPoetry());
+                _bookPresenter.ApplyTypography(FontProfileFactory.CreateArialBaseline());
             }
 
             if (_autoStart)
@@ -66,6 +68,8 @@ namespace AdapTypeXR.Simulation
 
         private void OnDestroy()
         {
+            if (_comprehensionPanel != null)
+                _comprehensionPanel.ResponseRecorded -= OnComprehensionResponse;
             _repository?.Dispose();
         }
 
@@ -84,7 +88,7 @@ namespace AdapTypeXR.Simulation
             }
 
             var conditions = BuildConditions();
-            var passage = PassageLibrary.BoemPaukenslag();
+            var passage = PassageLibrary.DePaepeWatHelpt();
 
             _sessionController.BeginSession(
                 participantId: _participantId,
@@ -128,7 +132,48 @@ namespace AdapTypeXR.Simulation
             _repository = new CsvDataCollectionRepository();
             _sessionController.Inject(eyeTracker, _repository, bookPresenter);
 
+            // Ensure a font selector panel exists at runtime even if the scene
+            // was built before FontSelector3DPanel was added to SceneBuilder.
+            if (FindFirstObjectByType<FontSelector3DPanel>() == null)
+            {
+                var selectorGo = new GameObject("FontSelector3D");
+                selectorGo.transform.position = new Vector3(0.56f, 1.15f, 1.0f);
+                selectorGo.transform.eulerAngles = new Vector3(-10f, -15f, 0f);
+                selectorGo.AddComponent<FontSelector3DPanel>();
+                Debug.Log("[SimulationBootstrapper] Created FontSelector3DPanel at runtime.");
+            }
+
+            // Ensure a passage selector panel exists.
+            if (FindFirstObjectByType<PassageSelectorPanel>() == null)
+            {
+                var passageGo = new GameObject("PassageSelector3D");
+                passageGo.transform.position = new Vector3(-0.56f, 1.15f, 1.0f);
+                passageGo.transform.eulerAngles = new Vector3(-10f, 15f, 0f);
+                passageGo.AddComponent<PassageSelectorPanel>();
+                Debug.Log("[SimulationBootstrapper] Created PassageSelectorPanel at runtime.");
+            }
+
+            // Ensure a comprehension question panel exists.
+            _comprehensionPanel = FindFirstObjectByType<ComprehensionQuestionPanel>();
+            if (_comprehensionPanel == null)
+            {
+                var compGo = new GameObject("ComprehensionQuestions3D");
+                compGo.transform.position = new Vector3(0f, 1.30f, 1.0f);
+                compGo.transform.eulerAngles = new Vector3(-10f, 0f, 0f);
+                _comprehensionPanel = compGo.AddComponent<ComprehensionQuestionPanel>();
+                Debug.Log("[SimulationBootstrapper] Created ComprehensionQuestionPanel at runtime.");
+            }
+
+            // Wire comprehension response recording.
+            _comprehensionPanel.ResponseRecorded += OnComprehensionResponse;
+
             Debug.Log("[SimulationBootstrapper] Dependencies wired successfully.");
+        }
+
+        private void OnComprehensionResponse(Core.Models.ComprehensionResponse response)
+        {
+            if (_repository == null) return;
+            _ = _repository.RecordComprehensionResponseAsync(response);
         }
 
         private List<TypographyConfig> BuildConditions()

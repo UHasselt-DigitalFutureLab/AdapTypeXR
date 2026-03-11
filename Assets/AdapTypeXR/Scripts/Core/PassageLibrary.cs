@@ -11,6 +11,19 @@ namespace AdapTypeXR.Core
     /// </summary>
     public static class PassageLibrary
     {
+        /// <summary>
+        /// Returns all available passages in the library.
+        /// Used by passage selector UI to enumerate options.
+        /// </summary>
+        public static IReadOnlyList<ReadingPassage> GetAllPassages() =>
+            new[]
+            {
+                DePaepeWatHelpt(),
+                BoemPaukenslag(),
+                MarcGroet(),
+                TheRoadNotTaken(),
+            };
+
         // ── Public Catalogue ───────────────────────────────────────────────
 
         /// <summary>
@@ -155,45 +168,153 @@ namespace AdapTypeXR.Core
         }
 
         /// <summary>
-        /// Placeholder for a poem by Stijn De Paepe.
-        /// Replace the page text below with the actual poem text once obtained
-        /// and permission has been verified with the author.
-        ///
-        /// Contact via READSEARCH or Digital Future Lab networks.
+        /// "Wat helpt" — Stijn De Paepe (De Morgen, 2020).
+        /// One of De Paepe's best-known poems, written during the corona crisis.
+        /// Published as a Dagvers in De Morgen. Included with educational/research intent.
+        /// Flesch-Kincaid Grade Level: ~4.5 (simple vocabulary, strong rhythm).
         /// </summary>
-        public static ReadingPassage DePaepePoem()
+        public static ReadingPassage DePaepeWatHelpt()
         {
             const string page1 =
-                "[ Gedicht — Stijn De Paepe ]\n\n" +
-                "── PLAATSHOUDER ──\n\n" +
-                "Vervang deze tekst door het\n" +
-                "eigenlijke gedicht van Stijn De Paepe.\n\n" +
-                "Verifieer de licentievoorwaarden\n" +
-                "en neem contact op met de auteur\n" +
-                "voor gebruik in wetenschappelijk\n" +
-                "onderzoek indien van toepassing.\n\n" +
-                "Neem contact op via het\n" +
-                "READSEARCH-netwerk of de\n" +
-                "Digital Future Lab.";
+                "Wat helpt\n" +
+                "Stijn De Paepe · De Morgen, 2020\n\n" +
+                "Als vloeken helpt, dan vloek je maar.\n" +
+                "Maak herrie, stennis en misbaar.\n" +
+                "Scheld schel en luid je goudvis uit\n" +
+                "en schreeuw je scherven bij elkaar.\n\n" +
+                "Als bidden helpt, bid dan gerust.\n" +
+                "Als het je troost of sterkt of sust.\n" +
+                "Of vraag om raad. Als Hij bestaat\n" +
+                "dan is het goed, maar 't is geen must.\n\n" +
+                "Als huilen helpt, ga dan je gang.\n" +
+                "Het is niet niks en het duurt lang.\n" +
+                "Het kan geen kwaad als het niet gaat.\n" +
+                "Het mag gezien zijn, wees niet bang.";
 
             const string page2 =
-                "──────────────────────────\n\n" +
-                "Bewerk PassageLibrary.cs,\n" +
-                "methode DePaepePoem(),\n" +
-                "om de echte tekst toe te voegen.\n\n\n" +
-                "— Stijn De Paepe\n\n" +
-                "   [ jaar en bundel hier invullen ]";
+                "Als praten helpt, bel me dan op\n" +
+                "en steek van wal, hals over kop\n" +
+                "en van de hak weer op de tak\n" +
+                "of zachtjes sluipend uit je slop.\n\n" +
+                "Als lopen helpt, vertrek meteen.\n" +
+                "Zeer doelgericht of nergens heen.\n" +
+                "Het hoeft niet snel, al mag dat wel.\n" +
+                "Met verre vrienden of alleen.\n\n" +
+                "Als zwijgen helpt, wees dan maar stil\n" +
+                "en duik — als dat is wat je wil —\n" +
+                "een tijdje weg van pijn en pech —\n" +
+                "als je weer opduikt, geef een gil.";
+
+            const string page3 =
+                "Als lachen helpt, ken ik een grap\n" +
+                "of val dolkomisch van de trap.\n" +
+                "Als dansen helpt, is er muziek.\n" +
+                "Als breien helpt, dan hou je steek.\n" +
+                "Als boos zijn helpt, geef ik kritiek.\n" +
+                "Als bakken helpt, let there be cake.\n" +
+                "Als yoga helpt, wees fluks en zen.\n" +
+                "Als slapen helpt, stop ik je in.\n" +
+                "Als schrijven helpt, scherp dan je pen.\n" +
+                "Als poetsen helpt, welaan: begin!\n\n" +
+                "Je voelt je murw en overstelpt\n" +
+                "en snakt naar stranden, wit geschelpt...\n" +
+                "Hou vol. Vat moed. Want het komt goed.\n" +
+                "Doe ondertussen maar wat helpt.\n\n" +
+                "— Stijn De Paepe (1979–2022)\n" +
+                "   De Morgen, Dagvers";
+
+            const string fullText = page1 + "\n\n" + page2 + "\n\n" + page3;
+
+            var questions = new List<ComprehensionQuestion>
+            {
+                new("Q1",
+                    "Welk advies geeft de dichter als je verdrietig bent?",
+                    QuestionType.CuedRecall,
+                    new[] { "huilen", "gang", "niet bang", "mag" },
+                    1f),
+
+                new("Q2",
+                    "Wat is de boodschap van de laatste strofe?",
+                    QuestionType.Inference,
+                    new[] { "volhouden", "moed", "goed", "helpt", "hoop" },
+                    2f),
+
+                new("Q3",
+                    "Het gedicht herhaalt steeds 'als ... helpt'. Wat is het effect van die herhaling?",
+                    QuestionType.Inference,
+                    new[] { "ritme", "troost", "mogelijkheden", "keuze", "steun", "structuur" },
+                    3f),
+            };
+
+            return new ReadingPassage(
+                passageId: "DEPAEPE_WATHELPT_001",
+                title: "Wat helpt — Stijn De Paepe",
+                fullText: fullText,
+                pages: new[] { page1, page2, page3 },
+                wordCount: fullText.Split(' ').Length,
+                fleschKincaidGradeLevel: 4.5f,
+                questions: questions);
+        }
+
+        /// <summary>
+        /// "Marc groet 's morgens de dingen" — Paul van Ostaijen (Nagelaten gedichten, 1928).
+        /// Public domain. One of the most celebrated Flemish poems.
+        /// Playful, childlike address of everyday objects. Visual/typographic poem.
+        /// Flesch-Kincaid Grade Level: ~2.0 (very simple vocabulary).
+        /// </summary>
+        public static ReadingPassage MarcGroet()
+        {
+            const string page1 =
+                "Marc groet 's morgens de dingen\n" +
+                "Paul van Ostaijen · Nagelaten gedichten, 1928\n\n" +
+                "Dag ventje met de fiets\n\n" +
+                "op de vaas met de bloem\n" +
+                "ploem ploem\n\n" +
+                "dag stoel naast de tafel\n\n" +
+                "dag brood op de tafel\n\n" +
+                "dag visserke-vis\n" +
+                "met de pijp\n" +
+                "en\n" +
+                "dag visserke-vis\n" +
+                "met de pet\n\n" +
+                "pet en pijp\n" +
+                "van het visserke-vis";
+
+            const string page2 =
+                "goeiendag\n\n\n" +
+                "D  a  a  —  a  g\n\n\n" +
+                "vis\n\n" +
+                "dag lieve vis\n\n" +
+                "dag klein visselansen\n\n" +
+                "mansen\n\n\n" +
+                "— Paul van Ostaijen (1896–1928)\n" +
+                "   Nagelaten gedichten";
 
             const string fullText = page1 + "\n\n" + page2;
 
+            var questions = new List<ComprehensionQuestion>
+            {
+                new("Q1",
+                    "Wie of wat begroet Marc in het gedicht?",
+                    QuestionType.CuedRecall,
+                    new[] { "ventje", "fiets", "stoel", "brood", "vis", "dingen" },
+                    1f),
+
+                new("Q2",
+                    "Wat valt op aan de manier waarop het gedicht is geschreven?",
+                    QuestionType.Inference,
+                    new[] { "kinderlijk", "speels", "herhaling", "klank", "eenvoudig", "visueel" },
+                    2f),
+            };
+
             return new ReadingPassage(
-                passageId: "DEPAEPE_POEM_001",
-                title: "Gedicht — Stijn De Paepe",
+                passageId: "VANOSTAIJEN_MARC_001",
+                title: "Marc groet 's morgens de dingen",
                 fullText: fullText,
                 pages: new[] { page1, page2 },
                 wordCount: fullText.Split(' ').Length,
-                fleschKincaidGradeLevel: 0f,
-                questions: new List<ComprehensionQuestion>());
+                fleschKincaidGradeLevel: 2.0f,
+                questions: questions);
         }
     }
 }

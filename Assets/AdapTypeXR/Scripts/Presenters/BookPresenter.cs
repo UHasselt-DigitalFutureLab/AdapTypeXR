@@ -101,7 +101,7 @@ namespace AdapTypeXR.Presenters
 
                 if (hasContent && _activeConfig != null)
                 {
-                    var renderer = _pageObjects[i].GetComponentInChildren<ITextRenderer>();
+                    var renderer = _pageObjects[i].GetComponentInChildren<ITextRenderer>(true);
                     renderer?.RenderText(passage.Pages[i], _activeConfig);
                 }
             }
@@ -120,7 +120,7 @@ namespace AdapTypeXR.Presenters
 
             for (int i = 0; i < _pageObjects.Count && i < _activePassage.Pages.Count; i++)
             {
-                var renderer = _pageObjects[i].GetComponentInChildren<ITextRenderer>();
+                var renderer = _pageObjects[i].GetComponentInChildren<ITextRenderer>(true);
                 renderer?.RenderText(_activePassage.Pages[i], config);
             }
 
@@ -171,7 +171,10 @@ namespace AdapTypeXR.Presenters
                 _pageObjects[i].SetActive(i == index);
 
             CurrentPageIndex = index;
-            _bookAnimator?.SetTrigger(AnimPageTurn);
+            // Unity serialised fields use fake-null; the ?. operator only checks C# null.
+            // An explicit Unity null check avoids UnassignedReferenceException.
+            if (_bookAnimator != null)
+                _bookAnimator.SetTrigger(AnimPageTurn);
         }
 
         /// <summary>
@@ -214,7 +217,7 @@ namespace AdapTypeXR.Presenters
                     continue;
                 }
 
-                if (_pageObjects[i].GetComponentInChildren<ITextRenderer>() == null)
+                if (_pageObjects[i].GetComponentInChildren<ITextRenderer>(true) == null)
                     Debug.LogWarning($"[BookPresenter] Page '{_pageObjects[i].name}' has no ITextRenderer. " +
                         "Text will not render on this page.");
             }

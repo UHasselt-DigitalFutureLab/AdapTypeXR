@@ -233,6 +233,9 @@ namespace AdapTypeXR.UI
                     "N: Next condition\n" +
                     "P: Pause / Resume\n" +
                     "Tab: Toggle panel\n" +
+                    "F1: Font selector\n" +
+                    "F2: Passage selector\n" +
+                    "F3: Comprehension Q's\n" +
                     "F: Reset camera\n" +
                     "RMB + drag: Look";
         }

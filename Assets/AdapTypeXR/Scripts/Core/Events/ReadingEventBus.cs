@@ -148,4 +148,16 @@ namespace AdapTypeXR.Core.Events
         public ReadingMetrics Metrics { get; }
         public PassageCompletedEvent(ReadingMetrics metrics) => Metrics = metrics;
     }
+
+    /// <summary>Published when all comprehension questions for a passage have been answered.</summary>
+    public readonly struct ComprehensionCompletedEvent : IReadingEvent
+    {
+        public string PassageId { get; }
+        public int QuestionCount { get; }
+        public ComprehensionCompletedEvent(string passageId, int questionCount)
+        {
+            PassageId = passageId;
+            QuestionCount = questionCount;
+        }
+    }
 }

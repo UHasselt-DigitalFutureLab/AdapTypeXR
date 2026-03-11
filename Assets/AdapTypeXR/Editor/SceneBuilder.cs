@@ -41,29 +41,49 @@ namespace AdapTypeXR.Editor
         // Camera starts at standing eye height, looking forward.
         private static readonly Vector3 CameraPosition = new(0f, 1.7f, 0f);
 
-        // Book sits 0.95 m in front of the camera, tilted -10° to face the reader naturally.
-        private static readonly Vector3 BookPosition  = new(0f, 1.15f, 0.95f);
+        // Book sits 1.0 m in front of the camera, tilted -10 deg to face the reader naturally.
+        // Scaled up 1.6x from original for XR readability.
+        private static readonly Vector3 BookPosition  = new(0f, 1.05f, 1.0f);
         private static readonly Vector3 BookRotation  = new(-10f, 0f, 0f);
 
-        // Single page canvas: 190 × 520 units at scale 0.001 = 0.190 m × 0.520 m.
+        // Single page canvas: 476 x 1224 units at scale 0.001 = 0.476 m x 1.224 m.
+        // Scaled 1.7× from previous (280×720) for comfortable XR reading.
         private const float CanvasScale  = 0.001f;
-        private const float CanvasWidth  = 190f;
-        private const float CanvasHeight = 520f;
+        private const float CanvasWidth  = 476f;
+        private const float CanvasHeight = 1224f;
 
         // Half-book offset: each page canvas is shifted left/right from the book centre.
-        private const float PageOffsetX = 0.115f;   // world-space metres
+        private const float PageOffsetX = 0.289f;   // world-space metres (0.170 × 1.7)
 
-        // Book physical dimensions (world space).
-        private const float CoverW = 0.480f;
-        private const float CoverH = 0.580f;
-        private const float CoverD = 0.028f;
-        private const float SpineW = 0.036f;
+        // Book physical dimensions (world space) — scaled 1.7× for XR readability.
+        private const float CoverW = 1.190f;
+        private const float CoverH = 1.360f;
+        private const float CoverD = 0.058f;
+        private const float SpineW = 0.075f;
+
+        // 3D font selector position: to the right of the larger book.
+        private static readonly Vector3 FontSelectorPosition = new(0.85f, 1.15f, 1.0f);
+        private static readonly Vector3 FontSelectorRotation = new(-10f, -15f, 0f);
+
+        // 3D passage selector position: to the left of the larger book.
+        private static readonly Vector3 PassageSelectorPosition = new(-0.85f, 1.15f, 1.0f);
+        private static readonly Vector3 PassageSelectorRotation = new(-10f, 15f, 0f);
+
+        // 3D comprehension question panel: above the larger book.
+        private static readonly Vector3 ComprehensionPanelPosition = new(0f, 1.55f, 1.0f);
+        private static readonly Vector3 ComprehensionPanelRotation = new(-10f, 0f, 0f);
 
         // ── Menu Entry Point ───────────────────────────────────────────────
 
         [MenuItem("AdapTypeXR/Build Simulation Scene")]
         public static void BuildSimulationScene()
         {
+            if (EditorApplication.isPlaying)
+            {
+                Debug.LogWarning("[SceneBuilder] Cannot build scene during Play mode.");
+                return;
+            }
+
             if (!ConfirmBuild()) return;
 
             EnsureScenesDirectory();
@@ -98,6 +118,12 @@ namespace AdapTypeXR.Editor
             // ── Font Selector UI ───────────────────────────────────────────
             CreateFontSelectorUI();
 
+            // ── Passage Selector UI ─────────────────────────────────────────
+            CreatePassageSelectorUI();
+
+            // ── Comprehension Question UI ───────────────────────────────────
+            CreateComprehensionUI();
+
             // ── Event System ───────────────────────────────────────────────
             CreateEventSystem();
 
@@ -113,6 +139,8 @@ namespace AdapTypeXR.Editor
                 "Controls:\n" +
                 "  ← → Arrow keys: Turn pages\n" +
                 "  F1: Toggle font selector\n" +
+                "  F2: Toggle passage selector\n" +
+                "  F3: Toggle comprehension questions\n" +
                 "  N: Next condition\n" +
                 "  P: Pause / Resume\n" +
                 "  Tab: Toggle researcher panel\n" +
@@ -172,8 +200,8 @@ namespace AdapTypeXR.Editor
             CreateTitlePage(book.transform, mainCamera);
 
             // Right pages — interactive BookPages auto-discovered by tag.
-            // Two pages cover the two-stanza split of the Frost poem.
-            for (int i = 0; i < 2; i++)
+            // Three pages to accommodate longer poems (e.g. De Paepe's "Wat helpt").
+            for (int i = 0; i < 3; i++)
                 CreateTextPage(book.transform, i, mainCamera);
 
             return book;
@@ -268,7 +296,7 @@ namespace AdapTypeXR.Editor
             titleRt.offsetMin = new Vector2(14f, 0f);
             titleRt.offsetMax = new Vector2(-14f, 0f);
             var titleTmp = titleGo.AddComponent<TextMeshProUGUI>();
-            titleTmp.text = "The Road\nNot Taken";
+            titleTmp.text = "Wat helpt";
             titleTmp.fontSize = 28f;
             titleTmp.fontStyle = FontStyles.Bold | FontStyles.Italic;
             titleTmp.color = new Color(0.12f, 0.10f, 0.08f);
@@ -294,7 +322,7 @@ namespace AdapTypeXR.Editor
             authorRt.offsetMin = new Vector2(14f, 0f);
             authorRt.offsetMax = new Vector2(-14f, 0f);
             var authorTmp = authorGo.AddComponent<TextMeshProUGUI>();
-            authorTmp.text = "Robert Frost · 1916";
+            authorTmp.text = "Stijn De Paepe · De Morgen, 2020";
             authorTmp.fontSize = 13f;
             authorTmp.fontStyle = FontStyles.Italic;
             authorTmp.color = new Color(0.30f, 0.24f, 0.16f);
@@ -353,7 +381,7 @@ namespace AdapTypeXR.Editor
 
             var tmp = textGo.AddComponent<TextMeshProUGUI>();
             tmp.text = "";   // SimulationBootstrapper.Start() populates this immediately.
-            tmp.fontSize = 22f;
+            tmp.fontSize = 28f;
             tmp.color = new Color(0.08f, 0.07f, 0.05f);
             tmp.enableWordWrapping = true;
             tmp.overflowMode = TextOverflowModes.Overflow;
@@ -476,14 +504,43 @@ namespace AdapTypeXR.Editor
         }
 
         /// <summary>
-        /// Creates the font selector panel. FontSelectorPanel builds its own
-        /// Canvas and buttons at runtime from FontProfileFactory.
-        /// Toggle in Play mode with F1.
+        /// Creates the 3D world-space font selector panel.
+        /// Positioned to the right of the book, angled toward the reader.
+        /// FontSelector3DPanel builds its own world-space Canvas and buttons
+        /// at runtime from FontProfileFactory. Toggle in Play mode with F1.
         /// </summary>
         private static void CreateFontSelectorUI()
         {
-            var go = new GameObject("FontSelectorUI");
-            go.AddComponent<FontSelectorPanel>();
+            var go = new GameObject("FontSelector3D");
+            go.transform.position = FontSelectorPosition;
+            go.transform.eulerAngles = FontSelectorRotation;
+            go.AddComponent<FontSelector3DPanel>();
+        }
+
+        /// <summary>
+        /// Creates the 3D world-space passage selector panel.
+        /// Positioned to the left of the book, angled toward the reader.
+        /// Toggle in Play mode with F2.
+        /// </summary>
+        private static void CreatePassageSelectorUI()
+        {
+            var go = new GameObject("PassageSelector3D");
+            go.transform.position = PassageSelectorPosition;
+            go.transform.eulerAngles = PassageSelectorRotation;
+            go.AddComponent<PassageSelectorPanel>();
+        }
+
+        /// <summary>
+        /// Creates the 3D world-space comprehension question panel.
+        /// Positioned above the book. Toggle in Play mode with F3.
+        /// Starts hidden; shown by researcher after reading.
+        /// </summary>
+        private static void CreateComprehensionUI()
+        {
+            var go = new GameObject("ComprehensionQuestions3D");
+            go.transform.position = ComprehensionPanelPosition;
+            go.transform.eulerAngles = ComprehensionPanelRotation;
+            go.AddComponent<ComprehensionQuestionPanel>();
         }
 
         private static void CreateEventSystem()
@@ -618,23 +675,6 @@ namespace AdapTypeXR.Editor
 
             var mat = MakeMaterial(new Color(0.15f, 0.15f, 0.16f));
             floor.GetComponent<MeshRenderer>().sharedMaterial = mat;
-        }
-
-        /// <summary>
-        /// Adds a warm point light positioned just above and in front of the book
-        /// to illuminate it clearly against the dark background.
-        /// </summary>
-        private static void CreateBookLight()
-        {
-            var go = new GameObject("Book Light");
-            go.transform.position = BookPosition + new Vector3(0f, 0.5f, -0.4f);
-
-            var light = go.AddComponent<Light>();
-            light.type = LightType.Point;
-            light.color = new Color(1.0f, 0.95f, 0.85f);
-            light.intensity = 2.5f;
-            light.range = 2.0f;
-            light.shadows = LightShadows.None;
         }
 
         // ── Primitive / Material Helpers ───────────────────────────────────

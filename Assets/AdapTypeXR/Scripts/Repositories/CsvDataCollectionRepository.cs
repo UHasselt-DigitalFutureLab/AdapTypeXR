@@ -39,6 +39,7 @@ namespace AdapTypeXR.Repositories
         private string? _sessionDirectory;
         private StreamWriter? _gazeWriter;
         private StreamWriter? _metricsWriter;
+        private StreamWriter? _comprehensionWriter;
         private readonly ConcurrentQueue<GazeDataPoint> _gazeQueue = new();
         private CancellationTokenSource? _flushCts;
         private Task? _flushTask;
@@ -76,9 +77,12 @@ namespace AdapTypeXR.Repositories
                 Path.Combine(_sessionDirectory, "gaze.csv"), append: false, Encoding.UTF8);
             _metricsWriter = new StreamWriter(
                 Path.Combine(_sessionDirectory, "metrics.csv"), append: false, Encoding.UTF8);
+            _comprehensionWriter = new StreamWriter(
+                Path.Combine(_sessionDirectory, "comprehension.csv"), append: false, Encoding.UTF8);
 
             WriteGazeHeader();
             WriteMetricsHeader();
+            WriteComprehensionHeader();
             WriteSessionMetadata(session);
 
             // Start background flush loop.
@@ -105,6 +109,13 @@ namespace AdapTypeXR.Repositories
         }
 
         /// <inheritdoc />
+        public async Task RecordComprehensionResponseAsync(ComprehensionResponse response)
+        {
+            EnsureSessionActive();
+            await Task.Run(() => WriteComprehensionRow(response));
+        }
+
+        /// <inheritdoc />
         public async Task EndSessionAsync()
         {
             if (_activeSession == null) return;
@@ -119,8 +130,10 @@ namespace AdapTypeXR.Repositories
 
             _gazeWriter?.Dispose();
             _metricsWriter?.Dispose();
+            _comprehensionWriter?.Dispose();
             _gazeWriter = null;
             _metricsWriter = null;
+            _comprehensionWriter = null;
 
             Debug.Log($"[CsvDataCollectionRepository] Session ended: {_activeSession.SessionId}");
             _activeSession = null;
@@ -142,6 +155,7 @@ namespace AdapTypeXR.Repositories
             _flushCts?.Cancel();
             _gazeWriter?.Dispose();
             _metricsWriter?.Dispose();
+            _comprehensionWriter?.Dispose();
             _flushCts?.Dispose();
         }
 
@@ -196,6 +210,22 @@ namespace AdapTypeXR.Repositories
                 $"{m.ComprehensionScore:F1},{m.MaxComprehensionScore:F1},{m.ComprehensionRate:F3}," +
                 $"{m.PassageWordCount},{m.FleschKincaidGradeLevel:F1}");
             _metricsWriter.Flush();
+        }
+
+        private void WriteComprehensionHeader()
+        {
+            _comprehensionWriter!.WriteLine(
+                "SessionId,PassageId,QuestionId,ConditionId,ResponseText,SubmittedAt,ResponseTimeSeconds");
+        }
+
+        private void WriteComprehensionRow(ComprehensionResponse r)
+        {
+            // Escape commas and quotes in free-text response.
+            var escaped = r.ResponseText.Replace("\"", "\"\"");
+            _comprehensionWriter!.WriteLine(
+                $"{r.SessionId},{r.PassageId},{r.QuestionId},{r.ConditionId}," +
+                $"\"{escaped}\",{r.SubmittedAt:O},{r.ResponseTimeSeconds:F1}");
+            _comprehensionWriter.Flush();
         }
 
         private void WriteSessionMetadata(ReadingSession session)
