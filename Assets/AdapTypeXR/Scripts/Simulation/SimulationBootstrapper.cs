@@ -137,8 +137,8 @@ namespace AdapTypeXR.Simulation
             if (FindFirstObjectByType<FontSelector3DPanel>() == null)
             {
                 var selectorGo = new GameObject("FontSelector3D");
-                selectorGo.transform.position = new Vector3(0.56f, 1.15f, 1.0f);
-                selectorGo.transform.eulerAngles = new Vector3(-10f, -15f, 0f);
+                selectorGo.transform.position = new Vector3(1.6f, 1.15f, 0.4f);
+                selectorGo.transform.eulerAngles = new Vector3(-10f, -55f, 0f);
                 selectorGo.AddComponent<FontSelector3DPanel>();
                 Debug.Log("[SimulationBootstrapper] Created FontSelector3DPanel at runtime.");
             }
@@ -147,8 +147,8 @@ namespace AdapTypeXR.Simulation
             if (FindFirstObjectByType<PassageSelectorPanel>() == null)
             {
                 var passageGo = new GameObject("PassageSelector3D");
-                passageGo.transform.position = new Vector3(-0.56f, 1.15f, 1.0f);
-                passageGo.transform.eulerAngles = new Vector3(-10f, 15f, 0f);
+                passageGo.transform.position = new Vector3(-1.6f, 1.15f, 0.4f);
+                passageGo.transform.eulerAngles = new Vector3(-10f, 55f, 0f);
                 passageGo.AddComponent<PassageSelectorPanel>();
                 Debug.Log("[SimulationBootstrapper] Created PassageSelectorPanel at runtime.");
             }
@@ -158,8 +158,8 @@ namespace AdapTypeXR.Simulation
             if (_comprehensionPanel == null)
             {
                 var compGo = new GameObject("ComprehensionQuestions3D");
-                compGo.transform.position = new Vector3(0f, 1.30f, 1.0f);
-                compGo.transform.eulerAngles = new Vector3(-10f, 0f, 0f);
+                compGo.transform.position = new Vector3(1.4f, 1.35f, 0.7f);
+                compGo.transform.eulerAngles = new Vector3(-10f, -40f, 0f);
                 _comprehensionPanel = compGo.AddComponent<ComprehensionQuestionPanel>();
                 Debug.Log("[SimulationBootstrapper] Created ComprehensionQuestionPanel at runtime.");
             }

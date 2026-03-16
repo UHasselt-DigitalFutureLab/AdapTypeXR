@@ -1,8 +1,10 @@
 using System.IO;
 using AdapTypeXR.Controllers;
+using AdapTypeXR.Interaction;
 using AdapTypeXR.Presenters;
 using AdapTypeXR.Services;
 using AdapTypeXR.Simulation;
+using AdapTypeXR.Tracking;
 using AdapTypeXR.Typography;
 using AdapTypeXR.UI;
 using TMPro;
@@ -61,17 +63,17 @@ namespace AdapTypeXR.Editor
         private const float CoverD = 0.058f;
         private const float SpineW = 0.075f;
 
-        // 3D font selector position: to the right of the larger book.
-        private static readonly Vector3 FontSelectorPosition = new(0.85f, 1.15f, 1.0f);
-        private static readonly Vector3 FontSelectorRotation = new(-10f, -15f, 0f);
+        // 3D font selector position: far right, out of the reading field of view.
+        private static readonly Vector3 FontSelectorPosition = new(1.6f, 1.15f, 0.4f);
+        private static readonly Vector3 FontSelectorRotation = new(-10f, -55f, 0f);
 
-        // 3D passage selector position: to the left of the larger book.
-        private static readonly Vector3 PassageSelectorPosition = new(-0.85f, 1.15f, 1.0f);
-        private static readonly Vector3 PassageSelectorRotation = new(-10f, 15f, 0f);
+        // 3D passage selector position: far left, out of the reading field of view.
+        private static readonly Vector3 PassageSelectorPosition = new(-1.6f, 1.15f, 0.4f);
+        private static readonly Vector3 PassageSelectorRotation = new(-10f, 55f, 0f);
 
-        // 3D comprehension question panel: above the larger book.
-        private static readonly Vector3 ComprehensionPanelPosition = new(0f, 1.55f, 1.0f);
-        private static readonly Vector3 ComprehensionPanelRotation = new(-10f, 0f, 0f);
+        // 3D comprehension question panel: far right-forward, separate from the book.
+        private static readonly Vector3 ComprehensionPanelPosition = new(1.4f, 1.35f, 0.7f);
+        private static readonly Vector3 ComprehensionPanelRotation = new(-10f, -40f, 0f);
 
         // ── Menu Entry Point ───────────────────────────────────────────────
 
@@ -96,7 +98,7 @@ namespace AdapTypeXR.Editor
 
             // Set ambient lighting to a soft warm white to avoid harsh shadows on text.
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.6f, 0.6f, 0.65f);
+            RenderSettings.ambientLight = new Color(0.65f, 0.68f, 0.60f);  // warm outdoor ambient
             RenderSettings.ambientIntensity = 1f;
 
             // ── Camera ─────────────────────────────────────────────────────
@@ -138,14 +140,18 @@ namespace AdapTypeXR.Editor
                 "Press Play to start the simulation.\n\n" +
                 "Controls:\n" +
                 "  ← → Arrow keys: Turn pages\n" +
-                "  F1: Toggle font selector\n" +
-                "  F2: Toggle passage selector\n" +
-                "  F3: Toggle comprehension questions\n" +
-                "  N: Next condition\n" +
-                "  P: Pause / Resume\n" +
-                "  Tab: Toggle researcher panel\n" +
-                "  F: Reset camera\n" +
-                "  Right-click + drag: Look around",
+                "  G + drag: Grab and move the book\n\n" +
+                "Navigation:\n" +
+                "  W/A/S/D: Move  |  Q/E: Down/Up\n" +
+                "  I/J/K/L: Look (keyboard-only)\n" +
+                "  Right-click + drag: Look (mouse)\n" +
+                "  V: Toggle free-look (no click needed)\n" +
+                "  Scroll: Dolly  |  H-scroll: Strafe\n" +
+                "  Shift: Move faster  |  F: Reset camera\n\n" +
+                "Panels:\n" +
+                "  F1: Font selector  |  F2: Passages\n" +
+                "  F3: Comprehension  |  Tab: Researcher\n" +
+                "  N: Next condition  |  P: Pause",
                 "Got it");
         }
 
@@ -171,7 +177,7 @@ namespace AdapTypeXR.Editor
 
             var cam = go.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.18f, 0.18f, 0.22f);
+            cam.backgroundColor = new Color(0.53f, 0.72f, 0.88f);  // soft sky blue
             cam.fieldOfView = 75f;
             cam.nearClipPlane = 0.01f;
             cam.farClipPlane = 50f;
@@ -192,6 +198,20 @@ namespace AdapTypeXR.Editor
             book.transform.position = BookPosition;
             book.transform.eulerAngles = BookRotation;
             book.AddComponent<BookPresenter>();
+
+            // Rigidbody + collider for grab interaction.
+            var rb = book.AddComponent<Rigidbody>();
+            rb.isKinematic = true;
+            rb.useGravity = false;
+
+            var bookCollider = book.AddComponent<BoxCollider>();
+            bookCollider.size = new Vector3(CoverW, CoverH, CoverD + 0.02f);
+
+            // Grab controller — hold G + drag mouse in simulation.
+            book.AddComponent<BookInteractionController>();
+
+            // Pose tracker — logs distance/angle between user and book.
+            book.AddComponent<BookPoseTracker>();
 
             // 3-D hardcover geometry (purely visual, no colliders that block gaze).
             CreateBookGeometry(book.transform);
@@ -370,23 +390,24 @@ namespace AdapTypeXR.Editor
 
             page.AddComponent<GraphicRaycaster>();
 
-            // Text area fills the page with a small margin.
+            // Text area with generous book-style margins (top/bottom/left/right).
             var textGo = new GameObject("TextArea");
             textGo.transform.SetParent(page.transform, false);
             var textRt = textGo.AddComponent<RectTransform>();
             textRt.anchorMin = Vector2.zero;
             textRt.anchorMax = Vector2.one;
-            textRt.offsetMin = new Vector2(16f, 24f);
-            textRt.offsetMax = new Vector2(-10f, -16f);
+            textRt.offsetMin = new Vector2(32f, 56f);   // left, bottom — generous gutter
+            textRt.offsetMax = new Vector2(-28f, -42f);  // right, top — traditional margin
 
             var tmp = textGo.AddComponent<TextMeshProUGUI>();
             tmp.text = "";   // SimulationBootstrapper.Start() populates this immediately.
-            tmp.fontSize = 28f;
+            tmp.fontSize = 24f;
             tmp.color = new Color(0.08f, 0.07f, 0.05f);
             tmp.enableWordWrapping = true;
-            tmp.overflowMode = TextOverflowModes.Overflow;
-            tmp.alignment = TextAlignmentOptions.TopLeft;
-            tmp.lineSpacing = 8f;
+            tmp.overflowMode = TextOverflowModes.Truncate;  // clip text to page bounds
+            tmp.alignment = TextAlignmentOptions.TopJustified;
+            tmp.lineSpacing = 12f;
+            tmp.paragraphSpacing = 8f;
 
             textGo.AddComponent<TextRendererController>();
             textGo.AddComponent<TypographyAnimator>();
@@ -663,18 +684,97 @@ namespace AdapTypeXR.Editor
         // ── Environment Helpers ────────────────────────────────────────────
 
         /// <summary>
-        /// Adds a simple floor plane so the scene has spatial grounding.
-        /// A matte dark-grey material prevents it from distracting from the book.
+        /// Builds a calming park environment: grass ground, a bench, and simple trees.
+        /// Designed to put study participants at ease during reading sessions.
         /// </summary>
         private static void CreateFloor()
         {
-            var floor = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            floor.name = "Floor";
-            floor.transform.position = Vector3.zero;
-            floor.transform.localScale = new Vector3(3f, 1f, 3f);
+            // Shared materials.
+            var grassMat = MakeMaterial(new Color(0.28f, 0.50f, 0.21f));   // soft grass green
+            var pathMat  = MakeMaterial(new Color(0.62f, 0.56f, 0.45f));   // sandy path
+            var woodMat  = MakeMaterial(new Color(0.36f, 0.22f, 0.10f));   // warm wood
+            var ironMat  = MakeMaterial(new Color(0.18f, 0.18f, 0.20f));   // dark iron
+            var trunkMat = MakeMaterial(new Color(0.30f, 0.18f, 0.08f));   // bark brown
+            var leafMat  = MakeMaterial(new Color(0.22f, 0.45f, 0.18f));   // canopy green
 
-            var mat = MakeMaterial(new Color(0.15f, 0.15f, 0.16f));
-            floor.GetComponent<MeshRenderer>().sharedMaterial = mat;
+            // ── Ground plane (grass) ─────────────────────────────────────────
+            var floor = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            floor.name = "Ground_Grass";
+            floor.transform.position = Vector3.zero;
+            floor.transform.localScale = new Vector3(5f, 1f, 5f);
+            floor.GetComponent<MeshRenderer>().sharedMaterial = grassMat;
+
+            // ── Gravel path under the reader ─────────────────────────────────
+            var path = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            path.name = "Ground_Path";
+            path.transform.position = new Vector3(0f, 0.002f, 0f);
+            path.transform.localScale = new Vector3(0.4f, 1f, 1.2f);
+            path.GetComponent<MeshRenderer>().sharedMaterial = pathMat;
+
+            // ── Park bench (in front of camera, user sits on it) ─────────────
+            var bench = new GameObject("ParkBench");
+            bench.transform.position = new Vector3(0f, 0f, -0.15f);
+
+            // Bench seat
+            MakePrimitive(PrimitiveType.Cube, "Seat", bench.transform,
+                new Vector3(0f, 0.42f, 0f), new Vector3(1.4f, 0.05f, 0.40f), woodMat);
+
+            // Bench backrest
+            MakePrimitive(PrimitiveType.Cube, "Backrest", bench.transform,
+                new Vector3(0f, 0.68f, -0.18f), new Vector3(1.4f, 0.50f, 0.04f), woodMat);
+
+            // Bench legs (iron)
+            float legX = 0.55f;
+            MakePrimitive(PrimitiveType.Cube, "Leg_FL", bench.transform,
+                new Vector3(-legX, 0.21f, 0.14f), new Vector3(0.05f, 0.42f, 0.05f), ironMat);
+            MakePrimitive(PrimitiveType.Cube, "Leg_FR", bench.transform,
+                new Vector3(+legX, 0.21f, 0.14f), new Vector3(0.05f, 0.42f, 0.05f), ironMat);
+            MakePrimitive(PrimitiveType.Cube, "Leg_BL", bench.transform,
+                new Vector3(-legX, 0.21f, -0.14f), new Vector3(0.05f, 0.42f, 0.05f), ironMat);
+            MakePrimitive(PrimitiveType.Cube, "Leg_BR", bench.transform,
+                new Vector3(+legX, 0.21f, -0.14f), new Vector3(0.05f, 0.42f, 0.05f), ironMat);
+
+            // Armrests
+            MakePrimitive(PrimitiveType.Cube, "Armrest_L", bench.transform,
+                new Vector3(-legX, 0.56f, 0f), new Vector3(0.06f, 0.04f, 0.38f), ironMat);
+            MakePrimitive(PrimitiveType.Cube, "Armrest_R", bench.transform,
+                new Vector3(+legX, 0.56f, 0f), new Vector3(0.06f, 0.04f, 0.38f), ironMat);
+
+            // ── Trees (simple trunk + sphere canopy) ─────────────────────────
+            CreateTree("Tree_L", new Vector3(-3.5f, 0f, 3f), 0.15f, 2.8f, 1.6f, trunkMat, leafMat);
+            CreateTree("Tree_R", new Vector3(3.0f, 0f, 4f), 0.13f, 3.2f, 1.4f, trunkMat, leafMat);
+            CreateTree("Tree_Back", new Vector3(1.0f, 0f, 6f), 0.18f, 3.5f, 2.0f, trunkMat, leafMat);
+            CreateTree("Tree_FarL", new Vector3(-5f, 0f, 7f), 0.12f, 2.5f, 1.3f, trunkMat, leafMat);
+        }
+
+        /// <summary>Creates a simple tree from a cylinder trunk and sphere canopy.</summary>
+        private static void CreateTree(
+            string name, Vector3 position,
+            float trunkRadius, float trunkHeight, float canopyRadius,
+            Material trunkMat, Material leafMat)
+        {
+            var tree = new GameObject(name);
+            tree.transform.position = position;
+
+            // Trunk (cylinder)
+            var trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            trunk.name = "Trunk";
+            trunk.transform.SetParent(tree.transform, false);
+            trunk.transform.localPosition = new Vector3(0f, trunkHeight * 0.5f, 0f);
+            trunk.transform.localScale = new Vector3(trunkRadius * 2f, trunkHeight * 0.5f, trunkRadius * 2f);
+            trunk.GetComponent<MeshRenderer>().sharedMaterial = trunkMat;
+            var trunkCol = trunk.GetComponent<Collider>();
+            if (trunkCol != null) Object.DestroyImmediate(trunkCol);
+
+            // Canopy (sphere)
+            var canopy = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            canopy.name = "Canopy";
+            canopy.transform.SetParent(tree.transform, false);
+            canopy.transform.localPosition = new Vector3(0f, trunkHeight + canopyRadius * 0.6f, 0f);
+            canopy.transform.localScale = Vector3.one * (canopyRadius * 2f);
+            canopy.GetComponent<MeshRenderer>().sharedMaterial = leafMat;
+            var canopyCol = canopy.GetComponent<Collider>();
+            if (canopyCol != null) Object.DestroyImmediate(canopyCol);
         }
 
         // ── Primitive / Material Helpers ───────────────────────────────────
