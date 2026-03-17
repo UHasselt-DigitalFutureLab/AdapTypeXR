@@ -5,7 +5,8 @@
         "Unity.TextMeshPro",
         "Unity.XR.Interaction.Toolkit",
         "Unity.XR.OpenXR",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Varjo.XR"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

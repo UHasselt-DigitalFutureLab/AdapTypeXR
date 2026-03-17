@@ -4,9 +4,7 @@ using AdapTypeXR.Core.Interfaces;
 using AdapTypeXR.Core.Models;
 using UnityEngine;
 
-#if VARJO_XR
 using Varjo.XR;
-#endif
 
 namespace AdapTypeXR.Services
 {
